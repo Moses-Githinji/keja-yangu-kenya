@@ -29,7 +29,7 @@ const PropertyMap = ({
 
     // Note: Add your Mapbox public token to Supabase Edge Function Secrets
     // For now, using placeholder - get your token from https://mapbox.com/
-    mapboxgl.accessToken = process.env.VITE_MAPBOX_TOKEN || 'YOUR_MAPBOX_TOKEN_HERE';
+    mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN || 'YOUR_MAPBOX_TOKEN_HERE';
     
     map.current = new mapboxgl.Map({
       container: mapContainer.current,
@@ -74,7 +74,7 @@ const PropertyMap = ({
       <div ref={mapContainer} className="absolute inset-0" />
       
       {/* Overlay for when Mapbox token is not configured */}
-      {(!process.env.VITE_MAPBOX_TOKEN || process.env.VITE_MAPBOX_TOKEN === 'YOUR_MAPBOX_TOKEN_HERE') && (
+      {(!import.meta.env.VITE_MAPBOX_TOKEN || import.meta.env.VITE_MAPBOX_TOKEN === 'YOUR_MAPBOX_TOKEN_HERE') && (
         <div className="absolute inset-0 bg-muted/90 flex items-center justify-center backdrop-blur-sm">
           <div className="text-center p-8 bg-background/80 rounded-lg border">
             <div className="text-4xl mb-4">🗺️</div>
