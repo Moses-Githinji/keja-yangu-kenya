@@ -27,8 +27,9 @@ const PropertyMap = ({
   useEffect(() => {
     if (!mapContainer.current) return;
 
-    // Note: Replace with actual Mapbox token
-    mapboxgl.accessToken = 'YOUR_MAPBOX_TOKEN_HERE';
+    // Note: Add your Mapbox public token to Supabase Edge Function Secrets
+    // For now, using placeholder - get your token from https://mapbox.com/
+    mapboxgl.accessToken = process.env.VITE_MAPBOX_TOKEN || 'YOUR_MAPBOX_TOKEN_HERE';
     
     map.current = new mapboxgl.Map({
       container: mapContainer.current,
@@ -70,26 +71,31 @@ const PropertyMap = ({
 
   return (
     <div className={`relative w-full h-full ${className}`}>
-      {/* Placeholder for development - replace with actual map */}
-      <div 
-        ref={mapContainer} 
-        className="absolute inset-0 rounded-lg bg-muted flex items-center justify-center"
-      >
-        <div className="text-center p-8">
-          <div className="text-4xl mb-4">🗺️</div>
-          <h3 className="text-lg font-semibold text-card-foreground mb-2">
-            Interactive Map
-          </h3>
-          <p className="text-muted-foreground text-sm max-w-xs">
-            Mapbox integration will be displayed here once configured with your API key
-          </p>
-          <div className="mt-4 p-3 bg-primary/10 rounded-lg">
-            <p className="text-xs text-primary font-medium">
-              📍 Showing properties in Nairobi, Kenya
+      <div ref={mapContainer} className="absolute inset-0" />
+      
+      {/* Overlay for when Mapbox token is not configured */}
+      {(!process.env.VITE_MAPBOX_TOKEN || process.env.VITE_MAPBOX_TOKEN === 'YOUR_MAPBOX_TOKEN_HERE') && (
+        <div className="absolute inset-0 bg-muted/90 flex items-center justify-center backdrop-blur-sm">
+          <div className="text-center p-8 bg-background/80 rounded-lg border">
+            <div className="text-4xl mb-4">🗺️</div>
+            <h3 className="text-lg font-semibold mb-2">Interactive Map</h3>
+            <p className="text-muted-foreground text-sm max-w-xs mb-4">
+              Configure your Mapbox API key to see the interactive map
             </p>
+            <div className="space-y-2 text-xs">
+              <p className="font-medium text-primary">Setup Instructions:</p>
+              <p>1. Get your token from <span className="font-mono bg-muted px-1">mapbox.com</span></p>
+              <p>2. Add to Supabase Edge Function Secrets</p>
+              <p>3. Or set <span className="font-mono bg-muted px-1">VITE_MAPBOX_TOKEN</span></p>
+            </div>
+            <div className="mt-4 p-3 bg-primary/10 rounded-lg">
+              <p className="text-xs text-primary font-medium">
+                📍 {properties.length} properties in Nairobi
+              </p>
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };
