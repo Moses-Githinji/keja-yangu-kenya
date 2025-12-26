@@ -1,0 +1,643 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                       String                  @id @default(cuid())
+  firstName                String
+  lastName                 String
+  email                    String                  @unique
+  phone                    String?                 @unique
+  password                 String
+  role                     UserRole                @default(USER)
+  isActive                 Boolean                 @default(true)
+  isVerified               Boolean                 @default(false)
+  avatar                   String?
+  dateOfBirth              DateTime?
+  gender                   String?
+  nationality              String?
+  idNumber                 String?                 @unique
+  passportNumber           String?
+  bio                      String?
+  emailVerificationCode    String?
+  emailVerificationExpires DateTime?
+  phoneVerificationCode    String?
+  phoneVerificationExpires DateTime?
+  createdAt                DateTime                @default(now())
+  updatedAt                DateTime                @updatedAt
+  agentProfile             AgentProfile?
+  contentCreatorProfile    ContentCreatorProfile?
+  agentChats               Chat[]                  @relation("AgentChats")
+  userChats                Chat[]                  @relation("UserChats")
+  facebookAuth             FacebookAuth?
+  googleAuth               GoogleAuth?
+  sentMessages             Message[]
+  notifications            Notification[]
+  payments                 Payment[]
+  agentProperties          Property[]              @relation("AgentProperties")
+  properties               Property[]
+  agentInquiries           PropertyInquiry[]       @relation("AgentInquiries")
+  userInquiries            PropertyInquiry[]       @relation("UserInquiries")
+  preferences              UserPreferences?
+  favorites                UserPropertyFavorites[]
+  inquiries                UserPropertyInquiries[]
+  propertyEarnings         PropertyEarnings[]
+  creatorPayouts           CreatorPayouts[]
+  adRevenue                AdRevenue[]
+  adImpressions            AdImpression[]
+
+  @@map("users")
+}
+
+model UserPreferences {
+  id                 String         @id @default(cuid())
+  userId             String         @unique
+  propertyTypes      PropertyType[]
+  locations          String[]
+  emailNotifications Boolean        @default(true)
+  smsNotifications   Boolean        @default(true)
+  pushNotifications  Boolean        @default(true)
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  user               User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_preferences")
+}
+
+model AgentProfile {
+  id               String    @id @default(cuid())
+  userId           String    @unique
+  company          String?
+  licenseNumber    String?   @unique
+  experience       Int?
+  specializations  String[]
+  bio              String?
+  website          String?
+  isVerified       Boolean   @default(false)
+  verificationDate DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("agent_profiles")
+}
+
+model GoogleAuth {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  googleId     String   @unique
+  email        String
+  accessToken  String
+  refreshToken String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("google_auth")
+}
+
+model FacebookAuth {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  facebookId  String   @unique
+  email       String
+  accessToken String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("facebook_auth")
+}
+
+model Property {
+  id                String                  @id @default(cuid())
+  title             String
+  description       String
+  propertyType      PropertyType
+  listingType       ListingType
+  status            PropertyStatus          @default(ACTIVE)
+  address           String
+  city              String
+  county            String
+  neighborhood      String?
+  postalCode        String?
+  latitude          Float
+  longitude         Float
+  price             Float
+  currency          String                  @default("KES")
+  priceType         PriceType               @default(FIXED)
+  rentPeriod        RentPeriod?
+  deposit           Float?
+  bedrooms          Int?
+  bathrooms         Int?
+  area              String?
+  areaSize          Float
+  areaUnit          AreaUnit                @default(SQM)
+  yearBuilt         Int?
+  floors            Int?
+  parkingSpaces     Int?
+  features          String[]
+  amenities         String[]
+  nearbyAmenities   String[]
+  ownerId           String
+  agentId           String?
+  isFeatured        Boolean                 @default(false)
+  isVerified        Boolean                 @default(false)
+  isPremium         Boolean                 @default(false)
+  slug              String                  @unique
+  views             Int                     @default(0)
+  inquiryCount      Int                     @default(0)
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+  listedAt          DateTime                @default(now())
+  soldAt            DateTime?
+  chats             Chat[]
+  payments          Payment[]
+  priceHistory      PriceHistory[]
+  agent             User?                   @relation("AgentProperties", fields: [agentId], references: [id])
+  owner             User                    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  documents         PropertyDocument[]
+  images            PropertyImage[]
+  propertyInquiries PropertyInquiry[]
+  showingTimes      ShowingTime[]
+  favorites         UserPropertyFavorites[]
+  inquiries         UserPropertyInquiries[]
+  earnings          PropertyEarnings[]
+  adImpressions     AdImpression[]
+  adRevenue         AdRevenue[]
+
+  @@index([ownerId])
+  @@index([agentId])
+  @@index([propertyType])
+  @@index([listingType])
+  @@index([status])
+  @@index([city])
+  @@index([county])
+  @@index([neighborhood])
+  @@index([price])
+  @@index([createdAt])
+  @@index([isPremium])
+  @@map("properties")
+}
+
+model PropertyImage {
+  id         String   @id @default(cuid())
+  propertyId String
+  url        String
+  altText    String?
+  isPrimary  Boolean  @default(false)
+  order      Int      @default(0)
+  createdAt  DateTime @default(now())
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@map("property_images")
+}
+
+model PropertyDocument {
+  id         String   @id @default(cuid())
+  propertyId String
+  url        String
+  name       String
+  type       String
+  size       Int?
+  createdAt  DateTime @default(now())
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@map("property_documents")
+}
+
+model PriceHistory {
+  id         String   @id @default(cuid())
+  propertyId String
+  price      Float
+  currency   String
+  changeDate DateTime @default(now())
+  reason     String?
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@map("price_history")
+}
+
+model ShowingTime {
+  id          String   @id @default(cuid())
+  propertyId  String
+  date        DateTime
+  startTime   String
+  endTime     String
+  isAvailable Boolean  @default(true)
+  notes       String?
+  createdAt   DateTime @default(now())
+  property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@map("showing_times")
+}
+
+model UserPropertyFavorites {
+  id         String   @id @default(cuid())
+  userId     String
+  propertyId String
+  createdAt  DateTime @default(now())
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, propertyId])
+  @@map("user_property_favorites")
+}
+
+model UserPropertyInquiries {
+  id                String   @id @default(cuid())
+  userId            String
+  propertyId        String
+  message           String
+  contactPreference String   @default("EMAIL")
+  isRead            Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  property          Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_property_inquiries")
+}
+
+model Chat {
+  id         String    @id @default(cuid())
+  userId     String
+  agentId    String
+  propertyId String?
+  isActive   Boolean   @default(true)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  agent      User      @relation("AgentChats", fields: [agentId], references: [id], onDelete: Cascade)
+  property   Property? @relation(fields: [propertyId], references: [id])
+  user       User      @relation("UserChats", fields: [userId], references: [id], onDelete: Cascade)
+  messages   Message[]
+
+  @@unique([userId, agentId, propertyId])
+  @@map("chats")
+}
+
+model Message {
+  id          String   @id @default(cuid())
+  chatId      String
+  senderId    String
+  content     String
+  messageType String   @default("TEXT")
+  isRead      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  chat        Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  sender      User     @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@map("messages")
+}
+
+model PropertyInquiry {
+  id                String   @id @default(cuid())
+  propertyId        String
+  userId            String
+  agentId           String
+  message           String
+  contactPreference String   @default("EMAIL")
+  isRead            Boolean  @default(false)
+  status            String   @default("PENDING")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  agent             User     @relation("AgentInquiries", fields: [agentId], references: [id], onDelete: Cascade)
+  property          Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  user              User     @relation("UserInquiries", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("property_inquiries")
+}
+
+model Payment {
+  id            String        @id @default(cuid())
+  userId        String
+  propertyId    String?
+  amount        Float
+  currency      String        @default("KES")
+  status        PaymentStatus @default(PENDING)
+  method        PaymentMethod
+  transactionId String?       @unique
+  description   String?
+  metadata      Json?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  property      Property?     @relation(fields: [propertyId], references: [id])
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("payments")
+}
+
+model Notification {
+  id        String             @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String
+  message   String
+  status    NotificationStatus @default(UNREAD)
+  metadata  Json?
+  readAt    DateTime?
+  createdAt DateTime           @default(now())
+  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@map("notifications")
+}
+
+// New models for monetization system
+
+model ContentCreatorProfile {
+  id                  String                  @id @default(cuid())
+  userId              String                  @unique
+  isEnrolled          Boolean                 @default(false)
+  enrollmentDate      DateTime?
+  enrollmentStatus    CreatorEnrollmentStatus @default(PENDING)
+  totalEarnings       Float                   @default(0)
+  totalPayouts        Float                   @default(0)
+  availableBalance    Float                   @default(0)
+  viewRate            Float                   @default(0.01) // KES per view
+  inquiryRate         Float                   @default(0.50) // KES per inquiry
+  premiumListingRate  Float                   @default(0.10) // 10% of premium fee
+  adRevenueRate       Float                   @default(0.70) // 70% of ad revenue
+  minimumPayout       Float                   @default(100) // Minimum KES for payout
+  taxId               String?                 @unique
+  bankAccount         Json? // Bank account details
+  mpesaNumber         String?
+  payoutMethod        PayoutMethod            @default(MPESA)
+  isTaxExempt         Boolean                 @default(false)
+  taxRate             Float                   @default(0.16) // 16% VAT
+  complianceScore     Int                     @default(100)
+  lastComplianceCheck DateTime?
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
+  user                User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  earnings            PropertyEarnings[]
+  payouts             CreatorPayouts[]
+  adRevenue           AdRevenue[]
+  violations          ComplianceViolation[]
+
+  @@map("content_creator_profiles")
+}
+
+model PropertyEarnings {
+  id              String                @id @default(cuid())
+  propertyId      String
+  creatorId       String
+  earningsType    EarningsType
+  amount          Float
+  currency        String                @default("KES")
+  views           Int                   @default(0)
+  inquiries       Int                   @default(0)
+  adImpressions   Int                   @default(0)
+  calculationDate DateTime              @default(now())
+  isProcessed     Boolean               @default(false)
+  processedAt     DateTime?
+  createdAt       DateTime              @default(now())
+  property        Property              @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  creator         ContentCreatorProfile @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  User            User?                 @relation(fields: [userId], references: [id])
+  userId          String?
+
+  @@unique([propertyId, creatorId, calculationDate])
+  @@map("property_earnings")
+}
+
+model CreatorPayouts {
+  id             String                @id @default(cuid())
+  creatorId      String
+  amount         Float
+  currency       String                @default("KES")
+  method         PayoutMethod
+  status         PayoutStatus          @default(PENDING)
+  transactionId  String?               @unique
+  bankReference  String?
+  mpesaReference String?
+  processedAt    DateTime?
+  failureReason  String?
+  metadata       Json?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+  creator        ContentCreatorProfile @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  User           User?                 @relation(fields: [userId], references: [id])
+  userId         String?
+
+  @@map("creator_payouts")
+}
+
+model AdRevenue {
+  id          String                @id @default(cuid())
+  creatorId   String
+  propertyId  String?
+  adType      AdType
+  impressions Int
+  clicks      Int
+  revenue     Float
+  currency    String                @default("KES")
+  cpm         Float // Cost per mille (per 1000 impressions)
+  cpc         Float // Cost per click
+  date        DateTime              @default(now())
+  isProcessed Boolean               @default(false)
+  processedAt DateTime?
+  createdAt   DateTime              @default(now())
+  creator     ContentCreatorProfile @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  property    Property?             @relation(fields: [propertyId], references: [id])
+  User        User?                 @relation(fields: [userId], references: [id])
+  userId      String?
+
+  @@map("ad_revenue")
+}
+
+model AdImpression {
+  id             String         @id @default(cuid())
+  propertyId     String
+  adType         AdType
+  impressionType ImpressionType
+  revenue        Float
+  currency       String         @default("KES")
+  timestamp      DateTime       @default(now())
+  userAgent      String?
+  ipAddress      String?
+  location       Json? // Geographic location data
+  property       Property?      @relation(fields: [propertyId], references: [id])
+  User           User?          @relation(fields: [userId], references: [id])
+  userId         String?
+
+  @@map("ad_impressions")
+}
+
+model ComplianceViolation {
+  id              String                @id @default(cuid())
+  creatorId       String
+  violationType   ViolationType
+  severity        ViolationSeverity
+  description     String
+  evidence        Json?
+  isResolved      Boolean               @default(false)
+  resolvedAt      DateTime?
+  resolutionNotes String?
+  penaltyAmount   Float                 @default(0)
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+  creator         ContentCreatorProfile @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+
+  @@map("compliance_violations")
+}
+
+enum UserRole {
+  USER
+  AGENT
+  ADMIN
+  CONTENT_CREATOR
+}
+
+enum PropertyType {
+  HOUSE
+  APARTMENT
+  VILLA
+  TOWNHOUSE
+  LAND
+  DUPLEX
+  FARMHOUSE
+  PENTHOUSE
+  COMMERCIAL
+  STUDENT_HOSTEL
+  INDUSTRIAL
+  BEACH_HOUSE
+  SERVICED
+  STUDIO
+}
+
+enum ListingType {
+  SALE
+  RENT
+  BOTH
+}
+
+enum PropertyStatus {
+  ACTIVE
+  PENDING
+  SOLD
+  RENTED
+  INACTIVE
+  UNDER_CONTRACT
+}
+
+enum PriceType {
+  FIXED
+  NEGOTIABLE
+  ON_REQUEST
+}
+
+enum RentPeriod {
+  MONTHLY
+  WEEKLY
+  DAILY
+  YEARLY
+}
+
+enum AreaUnit {
+  SQM
+  SQFT
+  ACRES
+  HECTARES
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  CANCELLED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  STRIPE
+  MPESA
+  BANK_TRANSFER
+  CASH
+}
+
+enum NotificationType {
+  PROPERTY_INQUIRY
+  APPOINTMENT_REMINDER
+  PRICE_UPDATE
+  NEW_PROPERTY
+  SYSTEM_UPDATE
+}
+
+enum NotificationStatus {
+  UNREAD
+  READ
+  ARCHIVED
+}
+
+// New enums for monetization system
+
+enum CreatorEnrollmentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+  TERMINATED
+}
+
+enum EarningsType {
+  VIEW_BASED
+  INQUIRY_BASED
+  PREMIUM_LISTING
+  AD_REVENUE
+  BONUS
+  REFERRAL
+}
+
+enum PayoutMethod {
+  MPESA
+  BANK_TRANSFER
+  PAYPAL
+  STRIPE
+}
+
+enum PayoutStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum AdType {
+  BANNER
+  INTERSTITIAL
+  NATIVE
+  VIDEO
+  SEARCH
+  RECOMMENDATION
+}
+
+enum ImpressionType {
+  VIEW
+  CLICK
+  ENGAGEMENT
+  CONVERSION
+}
+
+enum ViolationType {
+  FAKE_PROPERTY
+  DUPLICATE_LISTING
+  MISLEADING_INFORMATION
+  INAPPROPRIATE_CONTENT
+  SPAM
+  COPYRIGHT_VIOLATION
+  LEGAL_COMPLIANCE
+  TAX_EVASION
+}
+
+enum ViolationSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
