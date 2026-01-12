@@ -1,0 +1,120 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "KejaYangu Payment System Monitoring",
+    "tags": ["kejayangu", "payments", "monitoring"],
+    "timezone": "UTC",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Payment Success Rate (24h)",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "rate(http_requests_total{job=\"kejayangu-api\", status=~\"2..\"}[24h]) / rate(http_requests_total{job=\"kejayangu-api\"}[24h]) * 100",
+            "legendFormat": "Success Rate"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "value": null, "color": "red" },
+                { "value": 95, "color": "orange" },
+                { "value": 99, "color": "green" }
+              ]
+            }
+          }
+        },
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 }
+      },
+      {
+        "id": 2,
+        "title": "Payment Response Time",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job=\"kejayangu-api\", route=~\"/api/v1/payments.*\"}[5m]))",
+            "legendFormat": "95th percentile"
+          },
+          {
+            "expr": "histogram_quantile(0.50, rate(http_request_duration_seconds_bucket{job=\"kejayangu-api\", route=~\"/api/v1/payments.*\"}[5m]))",
+            "legendFormat": "50th percentile"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 }
+      },
+      {
+        "id": 3,
+        "title": "Payment Methods Usage",
+        "type": "piechart",
+        "targets": [
+          {
+            "expr": "sum(rate(payment_method_total[1h])) by (method)",
+            "legendFormat": "{{method}}"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 8, "x": 0, "y": 8 }
+      },
+      {
+        "id": 4,
+        "title": "Failed Payments",
+        "type": "table",
+        "targets": [
+          {
+            "expr": "increase(payment_failed_total[1h])",
+            "legendFormat": "Failed Payments"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 8, "x": 8, "y": 8 }
+      },
+      {
+        "id": 5,
+        "title": "Payment Volume (1h)",
+        "type": "barchart",
+        "targets": [
+          {
+            "expr": "increase(payment_total[1h])",
+            "legendFormat": "Total Payments"
+          },
+          {
+            "expr": "increase(payment_successful_total[1h])",
+            "legendFormat": "Successful Payments"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 8, "x": 16, "y": 8 }
+      },
+      {
+        "id": 6,
+        "title": "Payment Gateway Status",
+        "type": "table",
+        "targets": [
+          {
+            "expr": "up{job=~\"kejayangu-.*\"}",
+            "legendFormat": "{{job}}"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 }
+      },
+      {
+        "id": 7,
+        "title": "Security Events",
+        "type": "table",
+        "targets": [
+          {
+            "expr": "increase(security_event_total[1h]) by (type)",
+            "legendFormat": "{{type}}"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 }
+      }
+    ],
+    "time": { "from": "now-1h", "to": "now" },
+    "refresh": "30s",
+    "schemaVersion": 27,
+    "version": 0,
+    "links": []
+  }
+}

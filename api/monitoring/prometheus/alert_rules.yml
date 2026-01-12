@@ -1,0 +1,65 @@
+groups:
+  - name: payment_alerts
+    rules:
+      - alert: PaymentSuccessRateLow
+        expr: rate(http_requests_total{job="kejayangu-api", status=~"[45].."}[5m]) / rate(http_requests_total{job="kejayangu-api"}[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Payment success rate is low"
+          description: "Payment success rate is below 95% for the last 5 minutes"
+
+      - alert: PaymentResponseTimeHigh
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job="kejayangu-api", route=~"/api/v1/payments.*"}[5m])) > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Payment response time is high"
+          description: "95th percentile payment response time is above 5 seconds"
+
+      - alert: PaymentServiceDown
+        expr: up{job="kejayangu-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Payment service is down"
+          description: "KejaYangu API payment service is not responding"
+
+      - alert: DatabaseConnectionIssues
+        expr: rate(postgres_connection_errors_total[5m]) > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Database connection issues"
+          description: "High number of database connection errors detected"
+
+      - alert: HighMemoryUsage
+        expr: (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100 > 90
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage"
+          description: "Server memory usage is above 90%"
+
+      - alert: SecurityEventSpike
+        expr: increase(security_event_total[10m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Security event spike detected"
+          description: "Unusual number of security events detected in the last 10 minutes"
+
+      - alert: PaymentGatewayFailure
+        expr: increase(payment_gateway_failure_total[5m]) > 3
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Payment gateway failures"
+          description: "Multiple payment gateway failures detected"
