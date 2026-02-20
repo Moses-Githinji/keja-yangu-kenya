@@ -13,7 +13,7 @@ interface SearchInputProps {
   onResultsChange?: (results: any[]) => void;
   className?: string;
   showFilters?: boolean;
-  listingType?: "SALE" | "RENT";
+  listingType?: "SALE" | "RENT" | "SHORT_TERM_RENT";
 }
 
 export const SearchInput: React.FC<SearchInputProps> = ({

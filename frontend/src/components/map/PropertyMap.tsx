@@ -1,28 +1,40 @@
 import React, { useEffect, useRef, useState } from "react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
-import { ChevronLeft, ChevronRight, X, Eye } from "lucide-react";
+import { ChevronLeft, ChevronRight, X } from "lucide-react";
+
+import type { Property } from "@/types/property";
 
 interface PropertyMapProps {
   className?: string;
   center?: [number, number]; // [longitude, latitude]
   zoom?: number;
-  properties?: Array<{
-    id: string;
-    longitude: number;
-    latitude: number;
-    title: string;
-    price: string;
-    propertyType?: string;
-    bedrooms?: number;
-    bathrooms?: number;
-    area?: number;
-    images?: string[];
-    amenities?: string[];
-    rating?: number;
-  }>;
+  properties?: Array<
+    Partial<Property> & {
+      // Required fields for the map
+      id: string;
+      longitude: number;
+      latitude: number;
+      title: string;
+      price: number;
+      // Other optional fields that might be used in the map popup
+      propertyType?: string;
+      bedrooms?: number;
+      bathrooms?: number;
+      areaSize?: number;
+      areaUnit?: string;
+      image?: string;
+      images?: string[] | Array<{ url: string; [key: string]: any }>;
+      listingType?: string;
+      amenities?: string[];
+      nearbyAmenities?: string[];
+      rating?: number;
+      address?: string;
+      city?: string;
+      slug?: string;
+    }
+  >;
   onPinClick?: (propertyId: string) => void;
-  onQuickView?: (propertyId: string) => void;
   selectedPropertyId?: string | null;
   showMapToggle?: boolean;
 }
@@ -33,7 +45,6 @@ const PropertyMap = ({
   zoom = 10,
   properties = [],
   onPinClick,
-  onQuickView,
   selectedPropertyId,
   showMapToggle = false,
 }: PropertyMapProps) => {
@@ -86,7 +97,10 @@ const PropertyMap = ({
         element: markerElement,
         anchor: "bottom",
       })
-        .setLngLat([property.longitude, property.latitude])
+        .setLngLat([
+          Number(property.longitude) || 0,
+          Number(property.latitude) || 0
+        ])
         .addTo(map.current!);
 
       // Store marker reference for later manipulation
@@ -123,6 +137,31 @@ const PropertyMap = ({
         }
       });
     });
+
+    // Fit map to bounds of markers
+    if (properties.length > 0 && map.current) {
+      const bounds = new mapboxgl.LngLatBounds();
+      let hasValidCoords = false;
+
+      properties.forEach((property) => {
+        const lng = Number(property.longitude);
+        const lat = Number(property.latitude);
+        
+        // Basic coordinate validation
+        if (!isNaN(lng) && !isNaN(lat) && lng !== 0 && lat !== 0) {
+          bounds.extend([lng, lat]);
+          hasValidCoords = true;
+        }
+      });
+
+      if (hasValidCoords) {
+        map.current.fitBounds(bounds, {
+          padding: 50,
+          maxZoom: 15,
+          duration: 1000
+        });
+      }
+    }
   };
 
   // Function to change map style
@@ -137,6 +176,13 @@ const PropertyMap = ({
 
     map.current.setStyle(styleUrls[style]);
     setMapStyle(style);
+  };
+
+  // Function to get image URL from either string or PropertyImage object
+  const getImageUrl = (
+    image: string | { url: string; [key: string]: any }
+  ): string => {
+    return typeof image === "string" ? image : image.url;
   };
 
   // Function to navigate carousel images
@@ -227,38 +273,11 @@ const PropertyMap = ({
       carouselDiv.className = "relative";
 
       const img = document.createElement("img");
-      img.src = property.images[currentImageIndex];
+      img.src = getImageUrl(property.images[currentImageIndex]);
       img.alt = `${property.title} - Image ${currentImageIndex + 1}`;
       img.className = "w-full h-32 object-cover rounded-t-lg";
 
-      // Quick View Button Overlay
-      const overlayDiv = document.createElement("div");
-      overlayDiv.className =
-        "absolute inset-0 bg-black/20 flex items-center justify-center";
-
-      const quickViewBtn = document.createElement("button");
-      quickViewBtn.className =
-        "bg-blue-600 text-white px-3 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2 shadow-lg";
-      quickViewBtn.innerHTML = `
-        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
-        </svg>
-        <span class="text-sm font-medium">Quick View</span>
-      `;
-
-      quickViewBtn.addEventListener("click", () => {
-        if (onQuickView) {
-          onQuickView(property.id);
-        }
-        if (popupRef.current) {
-          popupRef.current.remove();
-        }
-      });
-
-      overlayDiv.appendChild(quickViewBtn);
       carouselDiv.appendChild(img);
-      carouselDiv.appendChild(overlayDiv);
 
       // Carousel Navigation (if multiple images)
       if (property.images.length > 1) {
@@ -294,7 +313,10 @@ const PropertyMap = ({
 
     const price = document.createElement("div");
     price.className = "text-sm font-bold text-green-600";
-    price.textContent = property.price;
+    price.textContent =
+      typeof property.price === "number"
+        ? `KSh ${property.price.toLocaleString()}`
+        : property.price;
 
     const type = document.createElement("span");
     type.className =
@@ -318,13 +340,6 @@ const PropertyMap = ({
     }
     setSelectedProperty(null);
     setCurrentImageIndex(0);
-  };
-
-  // Handle quick view
-  const handleQuickView = () => {
-    if (onQuickView && selectedProperty) {
-      onQuickView(selectedProperty.id);
-    }
   };
 
   useEffect(() => {
@@ -563,63 +578,37 @@ const PropertyMap = ({
               <X className="h-3 w-3 text-gray-600" />
             </button>
 
-            {/* Image Carousel with Overlaid Quick View Button */}
+            {/* Image Carousel */}
             {selectedProperty.images && selectedProperty.images.length > 0 && (
               <div className="relative">
                 <div className="aspect-[4/3] rounded-t-lg overflow-hidden">
                   <img
-                    src={selectedProperty.images[currentImageIndex]}
+                    src={getImageUrl(
+                      selectedProperty.images[currentImageIndex]
+                    )}
                     alt={`${selectedProperty.title} - Image ${
                       currentImageIndex + 1
                     }`}
                     className="w-full h-full object-cover"
                   />
-
-                  {/* Quick View Button Overlay */}
-                  <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
-                    <button
-                      onClick={handleQuickView}
-                      className="bg-blue-600 text-white px-3 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2 shadow-lg backdrop-blur-sm"
-                    >
-                      <Eye className="h-4 w-4" />
-                      <span className="text-sm font-medium">Quick View</span>
-                    </button>
-                  </div>
-
-                  {/* Carousel Navigation */}
-                  {selectedProperty.images.length > 1 && (
-                    <>
-                      <button
-                        onClick={prevImage}
-                        className="absolute left-1 top-1/2 transform -translate-y-1/2 bg-white/90 backdrop-blur-sm rounded-full p-0.5 hover:bg-white transition-colors"
-                      >
-                        <ChevronLeft className="h-3 w-3 text-gray-600" />
-                      </button>
-                      <button
-                        onClick={nextImage}
-                        className="absolute right-1 top-1/2 transform -translate-y-1/2 bg-white/90 backdrop-blur-sm rounded-full p-0.5 hover:bg-white transition-colors"
-                      >
-                        <ChevronRight className="h-3 w-3 text-gray-600" />
-                      </button>
-                    </>
-                  )}
                 </div>
 
-                {/* Image Indicators */}
+                {/* Carousel Navigation */}
                 {selectedProperty.images.length > 1 && (
-                  <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 flex space-x-1">
-                    {selectedProperty.images.map((_, index) => (
-                      <button
-                        key={index}
-                        onClick={() => setCurrentImageIndex(index)}
-                        className={`w-2 h-2 rounded-full transition-colors ${
-                          index === currentImageIndex
-                            ? "bg-white"
-                            : "bg-white/50"
-                        }`}
-                      />
-                    ))}
-                  </div>
+                  <>
+                    <button
+                      onClick={prevImage}
+                      className="absolute left-1 top-1/2 transform -translate-y-1/2 bg-white/90 backdrop-blur-sm rounded-full p-0.5 hover:bg-white transition-colors"
+                    >
+                      <ChevronLeft className="h-3 w-3 text-gray-600" />
+                    </button>
+                    <button
+                      onClick={nextImage}
+                      className="absolute right-1 top-1/2 transform -translate-y-1/2 bg-white/90 backdrop-blur-sm rounded-full p-0.5 hover:bg-white transition-colors"
+                    >
+                      <ChevronRight className="h-3 w-3 text-gray-600" />
+                    </button>
+                  </>
                 )}
               </div>
             )}
@@ -631,7 +620,9 @@ const PropertyMap = ({
               </h3>
               <div className="flex items-center justify-between">
                 <div className="text-sm font-bold text-green-600">
-                  {selectedProperty.price}
+                  {typeof selectedProperty.price === "number"
+                    ? `KSh ${selectedProperty.price.toLocaleString()}`
+                    : selectedProperty.price}
                 </div>
                 <span className="text-xs text-gray-500 capitalize bg-white px-2 py-1 rounded-full border">
                   {selectedProperty.propertyType || "Property"}

@@ -1,7 +1,6 @@
 import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import Header from "@/components/layout/Header";
-import Footer from "@/components/layout/Footer";
+import { X, Upload } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,28 +12,35 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
-  Upload,
-  X,
-  MapPin,
-  DollarSign,
-  Home,
-  Car,
-  Wifi,
-  Shield,
-  Zap,
-} from "lucide-react";
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+
 import { apiService } from "@/services/api";
 import { useToast } from "@/hooks/use-toast";
 
-const AddProperty = () => {
-  const navigate = useNavigate();
+interface AddPropertyModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSuccess?: () => void;
+  userId?: string;
+}
+
+const AddPropertyModal: React.FC<AddPropertyModalProps> = ({
+  isOpen,
+  onClose,
+  onSuccess,
+}) => {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
-  const [images, setImages] = useState([]);
+  const [images, setImages] = useState<{ file: File; preview: string }[]>([]);
+
   const [formData, setFormData] = useState({
     title: "",
     description: "",
@@ -49,8 +55,8 @@ const AddProperty = () => {
     address: "",
     latitude: "",
     longitude: "",
-    features: [],
-    amenities: [],
+    features: [] as string[],
+    amenities: [] as string[],
   });
 
   const propertyTypes = [
@@ -63,7 +69,7 @@ const AddProperty = () => {
     "COMMERCIAL",
   ];
 
-  const listingTypes = ["SALE", "RENT"];
+  const listingTypes = ["SALE", "RENT", "SHORT_TERM_RENT"];
 
   const availableFeatures = [
     "Parking",
@@ -87,14 +93,11 @@ const AddProperty = () => {
     "Oven",
   ];
 
-  const handleInputChange = (field, value) => {
-    setFormData((prev) => ({
-      ...prev,
-      [field]: value,
-    }));
+  const handleInputChange = (field: string, value: string) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleFeatureToggle = (feature) => {
+  const handleFeatureToggle = (feature: string) => {
     setFormData((prev) => ({
       ...prev,
       features: prev.features.includes(feature)
@@ -103,7 +106,7 @@ const AddProperty = () => {
     }));
   };
 
-  const handleAmenityToggle = (amenity) => {
+  const handleAmenityToggle = (amenity: string) => {
     setFormData((prev) => ({
       ...prev,
       amenities: prev.amenities.includes(amenity)
@@ -112,8 +115,8 @@ const AddProperty = () => {
     }));
   };
 
-  const handleImageUpload = (event) => {
-    const files = Array.from(event.target.files) as File[];
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files ? Array.from(e.target.files) : [];
     const newImages = files.map((file) => ({
       file,
       preview: URL.createObjectURL(file),
@@ -121,11 +124,11 @@ const AddProperty = () => {
     setImages((prev) => [...prev, ...newImages]);
   };
 
-  const removeImage = (index) => {
+  const removeImage = (index: number) => {
     setImages((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     // Basic validation
@@ -141,8 +144,8 @@ const AddProperty = () => {
       !formData.longitude
     ) {
       toast({
-        title: "Validation Error",
-        description: "Please fill in all required fields.",
+        title: "Missing fields",
+        description: "Please fill in all required fields",
         variant: "destructive",
       });
       return;
@@ -151,7 +154,6 @@ const AddProperty = () => {
     setLoading(true);
 
     try {
-      // Prepare form data for submission
       const propertyData = {
         title: formData.title,
         description: formData.description,
@@ -175,88 +177,52 @@ const AddProperty = () => {
         status: "ACTIVE",
       };
 
-      // Upload images first if any
-      let uploadedImages = [];
-      console.log(`Starting upload of ${images.length} images`);
+      const createRes = await apiService.properties.create(propertyData);
+
+      const propertyId =
+        createRes.data?.data?.id ||
+        createRes.data?.id ||
+        createRes.data?.property?.id ||
+        createRes.data?.propertyId;
+
+      if (!propertyId) {
+        throw new Error("Could not retrieve property ID from response");
+      }
+
+      // Upload images if any (non-blocking failure)
       if (images.length > 0) {
         try {
-          // Extract files from images array
-          const files = images.map((image) => image.file);
-          console.log(
-            `Uploading ${files.length} images:`,
-            files.map((file, index) => ({
-              index: index + 1,
-              fileName: file.name,
-              fileSize: file.size,
-              fileType: file.type,
-            }))
-          );
-
-          console.log("Sending files to /images endpoint");
-          const uploadResponse = await apiService.upload.uploadImages(files);
-          console.log("Multiple upload response:", uploadResponse);
-
-          // Process the array of uploaded images
-          if (uploadResponse.data && Array.isArray(uploadResponse.data.data)) {
-            uploadedImages = uploadResponse.data.data.map(
-              (uploadedFile, index) => ({
-                url: uploadedFile.url,
-                caption: "",
-                isPrimary: index === 0,
-                order: index,
-              })
-            );
-            console.log("Processed uploadedImages array:", uploadedImages);
-          } else {
-            console.error("Unexpected response format:", uploadResponse.data);
-          }
-        } catch (error) {
-          console.error("Error uploading images:", error);
-          console.error("Error response:", error.response?.data);
-          // If multiple upload fails, don't proceed
-          return;
+          setLoading(true);
+          await apiService.properties.uploadImages(propertyId, images);
+          toast({
+            title: "Success",
+            description: "Property and images added successfully!",
+            variant: "default",
+          });
+        } catch (uploadErr: any) {
+          console.error("Image upload failed:", uploadErr);
+          toast({
+            title: "Partial Success",
+            description: `Property added, but there was an issue with image uploads: ${uploadErr.message}`,
+            variant: "destructive",
+          });
+        } finally {
+          setLoading(false);
         }
-      }
-      console.log(
-        `Upload complete. Successfully uploaded ${uploadedImages.length}/${images.length} images`
-      );
-
-      // Only create property if we have at least one successfully uploaded image
-      if (uploadedImages.length === 0 && images.length > 0) {
+      } else {
         toast({
-          title: "Upload Error",
-          description: "Failed to upload images. Please try again.",
-          variant: "destructive",
+          title: "Success",
+          description: "Property added successfully!",
         });
-        return;
       }
 
-      // Create property with image objects (only if we have images)
-      const finalPropertyData = {
-        ...propertyData,
-        ...(uploadedImages.length > 0 && {
-          images: { create: uploadedImages },
-        }),
-      };
-
-      console.log("Property data being sent:", finalPropertyData);
-      const response = await apiService.properties.create(finalPropertyData);
-
-      toast({
-        title: "Success",
-        description: "Property added successfully!",
-      });
-
-      // Navigate to agent dashboard
-      navigate("/agent/dashboard");
-    } catch (error) {
-      console.error("Error creating property:", error);
-      console.error("Error response:", error.response?.data);
+      onClose();
+      if (onSuccess) onSuccess();
+    } catch (err: any) {
+      console.error("Error creating property:", err);
       toast({
         title: "Error",
-        description:
-          error.response?.data?.message ||
-          "Failed to add property. Please try again.",
+        description: err.message || "Failed to add property. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -264,27 +230,46 @@ const AddProperty = () => {
     }
   };
 
+  const resetForm = () => {
+    setFormData({
+      title: "",
+      description: "",
+      price: "",
+      propertyType: "",
+      listingType: "",
+      bedrooms: "",
+      bathrooms: "",
+      area: "",
+      city: "",
+      county: "",
+      address: "",
+      latitude: "",
+      longitude: "",
+      features: [],
+      amenities: [],
+    });
+    setImages([]);
+  };
+
   return (
-    <div className="min-h-screen bg-background">
-      <Header />
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle>Add New Property</DialogTitle>
+          <DialogDescription>
+            Fill in the details below to list your property on the platform.
+          </DialogDescription>
+        </DialogHeader>
 
-      <main className="container mx-auto px-4 py-8">
-        <div className="max-w-4xl mx-auto">
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold mb-2">Add New Property</h1>
-            <p className="text-muted-foreground">
-              Fill in the details below to list your property
-            </p>
-          </div>
-
-          <form onSubmit={handleSubmit} className="space-y-8">
+        <div className="overflow-y-auto flex-1 pr-2">
+          <form onSubmit={handleSubmit} className="space-y-6 pb-6">
             {/* Basic Information */}
             <Card>
               <CardHeader>
                 <CardTitle>Basic Information</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <CardContent className="space-y-5">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                   <div>
                     <Label htmlFor="title">Property Title *</Label>
                     <Input
@@ -293,20 +278,21 @@ const AddProperty = () => {
                       onChange={(e) =>
                         handleInputChange("title", e.target.value)
                       }
-                      placeholder="e.g., Modern 3BR Apartment in Westlands"
+                      placeholder="e.g. Modern 3BR Apartment in Westlands"
                       required
                     />
                   </div>
+
                   <div>
                     <Label htmlFor="propertyType">Property Type *</Label>
                     <Select
                       value={formData.propertyType}
-                      onValueChange={(value) =>
-                        handleInputChange("propertyType", value)
+                      onValueChange={(v) =>
+                        handleInputChange("propertyType", v)
                       }
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Select property type" />
+                        <SelectValue placeholder="Select type" />
                       </SelectTrigger>
                       <SelectContent>
                         {propertyTypes.map((type) => (
@@ -327,23 +313,21 @@ const AddProperty = () => {
                     onChange={(e) =>
                       handleInputChange("description", e.target.value)
                     }
-                    placeholder="Describe your property..."
+                    placeholder="Describe your property in detail..."
                     rows={4}
                     required
                   />
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                   <div>
                     <Label htmlFor="listingType">Listing Type *</Label>
                     <Select
                       value={formData.listingType}
-                      onValueChange={(value) =>
-                        handleInputChange("listingType", value)
-                      }
+                      onValueChange={(v) => handleInputChange("listingType", v)}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="For sale or rent" />
+                        <SelectValue placeholder="Sale or Rent" />
                       </SelectTrigger>
                       <SelectContent>
                         {listingTypes.map((type) => (
@@ -354,6 +338,7 @@ const AddProperty = () => {
                       </SelectContent>
                     </Select>
                   </div>
+
                   <div>
                     <Label htmlFor="price">Price (KES) *</Label>
                     <Input
@@ -363,7 +348,7 @@ const AddProperty = () => {
                       onChange={(e) =>
                         handleInputChange("price", e.target.value)
                       }
-                      placeholder="e.g., 5000000"
+                      placeholder="e.g. 12500000"
                       required
                     />
                   </div>
@@ -371,13 +356,13 @@ const AddProperty = () => {
               </CardContent>
             </Card>
 
-            {/* Property Details */}
+            {/* Property Specs */}
             <Card>
               <CardHeader>
                 <CardTitle>Property Details</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                   <div>
                     <Label htmlFor="bedrooms">Bedrooms</Label>
                     <Input
@@ -387,9 +372,10 @@ const AddProperty = () => {
                       onChange={(e) =>
                         handleInputChange("bedrooms", e.target.value)
                       }
-                      placeholder="e.g., 3"
+                      placeholder="e.g. 3"
                     />
                   </div>
+
                   <div>
                     <Label htmlFor="bathrooms">Bathrooms</Label>
                     <Input
@@ -399,9 +385,10 @@ const AddProperty = () => {
                       onChange={(e) =>
                         handleInputChange("bathrooms", e.target.value)
                       }
-                      placeholder="e.g., 2"
+                      placeholder="e.g. 2"
                     />
                   </div>
+
                   <div>
                     <Label htmlFor="area">Area (sq ft)</Label>
                     <Input
@@ -411,7 +398,7 @@ const AddProperty = () => {
                       onChange={(e) =>
                         handleInputChange("area", e.target.value)
                       }
-                      placeholder="e.g., 1200"
+                      placeholder="e.g. 1450"
                     />
                   </div>
                 </div>
@@ -423,8 +410,8 @@ const AddProperty = () => {
               <CardHeader>
                 <CardTitle>Location</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <CardContent className="space-y-5">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                   <div>
                     <Label htmlFor="city">City *</Label>
                     <Input
@@ -433,10 +420,11 @@ const AddProperty = () => {
                       onChange={(e) =>
                         handleInputChange("city", e.target.value)
                       }
-                      placeholder="e.g., Nairobi"
+                      placeholder="e.g. Nairobi"
                       required
                     />
                   </div>
+
                   <div>
                     <Label htmlFor="county">County *</Label>
                     <Input
@@ -445,11 +433,12 @@ const AddProperty = () => {
                       onChange={(e) =>
                         handleInputChange("county", e.target.value)
                       }
-                      placeholder="e.g., Nairobi"
+                      placeholder="e.g. Nairobi"
                       required
                     />
                   </div>
                 </div>
+
                 <div>
                   <Label htmlFor="address">Full Address</Label>
                   <Input
@@ -458,10 +447,11 @@ const AddProperty = () => {
                     onChange={(e) =>
                       handleInputChange("address", e.target.value)
                     }
-                    placeholder="Street address, building, etc."
+                    placeholder="Street name, building, estate..."
                   />
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                   <div>
                     <Label htmlFor="latitude">Latitude *</Label>
                     <Input
@@ -472,10 +462,11 @@ const AddProperty = () => {
                       onChange={(e) =>
                         handleInputChange("latitude", e.target.value)
                       }
-                      placeholder="e.g., -1.2864"
+                      placeholder="e.g. -1.2921"
                       required
                     />
                   </div>
+
                   <div>
                     <Label htmlFor="longitude">Longitude *</Label>
                     <Input
@@ -486,7 +477,7 @@ const AddProperty = () => {
                       onChange={(e) =>
                         handleInputChange("longitude", e.target.value)
                       }
-                      placeholder="e.g., 36.8172"
+                      placeholder="e.g. 36.8219"
                       required
                     />
                   </div>
@@ -499,10 +490,10 @@ const AddProperty = () => {
               <CardHeader>
                 <CardTitle>Features & Amenities</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-6">
+              <CardContent className="space-y-8">
                 <div>
-                  <Label className="text-base font-medium">Features</Label>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-2">
+                  <Label className="text-base">Features</Label>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 mt-3">
                     {availableFeatures.map((feature) => (
                       <div
                         key={feature}
@@ -515,7 +506,7 @@ const AddProperty = () => {
                         />
                         <Label
                           htmlFor={`feature-${feature}`}
-                          className="text-sm"
+                          className="text-sm cursor-pointer"
                         >
                           {feature}
                         </Label>
@@ -525,8 +516,8 @@ const AddProperty = () => {
                 </div>
 
                 <div>
-                  <Label className="text-base font-medium">Amenities</Label>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-2">
+                  <Label className="text-base">Amenities</Label>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 mt-3">
                     {availableAmenities.map((amenity) => (
                       <div
                         key={amenity}
@@ -539,7 +530,7 @@ const AddProperty = () => {
                         />
                         <Label
                           htmlFor={`amenity-${amenity}`}
-                          className="text-sm"
+                          className="text-sm cursor-pointer"
                         >
                           {amenity}
                         </Label>
@@ -550,53 +541,54 @@ const AddProperty = () => {
               </CardContent>
             </Card>
 
-            {/* Images */}
+            {/* Images Upload */}
             <Card>
               <CardHeader>
                 <CardTitle>Property Images</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6">
-                  <div className="text-center">
-                    <Upload className="mx-auto h-12 w-12 text-gray-400" />
-                    <div className="mt-4">
-                      <Label htmlFor="image-upload" className="cursor-pointer">
-                        <span className="text-sm font-medium text-primary hover:text-primary/80">
-                          Upload images
-                        </span>
-                        <input
-                          id="image-upload"
-                          type="file"
-                          multiple
-                          accept="image/*"
-                          onChange={handleImageUpload}
-                          className="hidden"
-                        />
-                      </Label>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        PNG, JPG up to 10MB each
-                      </p>
-                    </div>
+              <CardContent>
+                <div className="border-2 border-dashed border-muted-foreground/50 rounded-xl p-8 text-center">
+                  <Upload className="mx-auto h-12 w-12 text-muted-foreground" />
+                  <div className="mt-4">
+                    <Label htmlFor="image-upload" className="cursor-pointer">
+                      <span className="text-sm font-medium text-primary hover:underline">
+                        Click to upload images
+                      </span>
+                    </Label>
+                    <input
+                      id="image-upload"
+                      type="file"
+                      multiple
+                      accept="image/*"
+                      onChange={handleImageUpload}
+                      className="hidden"
+                    />
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      PNG, JPG, WEBP • Max 10MB per image
+                    </p>
                   </div>
                 </div>
 
                 {images.length > 0 && (
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
                     {images.map((image, index) => (
-                      <div key={index} className="relative">
+                      <div
+                        key={index}
+                        className="group relative aspect-square rounded-lg overflow-hidden"
+                      >
                         <img
                           src={image.preview}
-                          alt={`Property ${index + 1}`}
-                          className="w-full h-24 object-cover rounded-lg"
+                          alt={`Preview ${index + 1}`}
+                          className="w-full h-full object-cover"
                         />
                         <Button
                           type="button"
                           variant="destructive"
-                          size="sm"
-                          className="absolute -top-2 -right-2 h-6 w-6 p-0"
+                          size="icon"
+                          className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
                           onClick={() => removeImage(index)}
                         >
-                          <X className="h-3 w-3" />
+                          <X className="h-4 w-4" />
                         </Button>
                       </div>
                     ))}
@@ -605,26 +597,20 @@ const AddProperty = () => {
               </CardContent>
             </Card>
 
-            {/* Submit */}
-            <div className="flex justify-end space-x-4">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => navigate("/agent/dashboard")}
-              >
+            {/* Action Buttons */}
+            <div className="flex justify-end gap-4 pt-4 border-t">
+              <Button type="button" variant="outline" onClick={onClose}>
                 Cancel
               </Button>
               <Button type="submit" disabled={loading}>
-                {loading ? "Adding Property..." : "Add Property"}
+                {loading ? "Creating..." : "Add Property"}
               </Button>
             </div>
           </form>
         </div>
-      </main>
-
-      <Footer />
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 };
 
-export default AddProperty;
+export default AddPropertyModal;

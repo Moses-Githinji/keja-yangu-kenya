@@ -43,74 +43,38 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
+import { getDisplayListingType } from "@/utils/propertyUtils";
+import { apiService } from "@/services/api";
+
 const AdminProperties: React.FC = () => {
   const [properties, setProperties] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
 
-  // Mock data - replace with actual API calls
+  // Fetch properties from API
   useEffect(() => {
-    const mockProperties = [
-      {
-        id: "1",
-        title: "Modern Family Home in Westlands",
-        propertyType: "HOUSE",
-        listingType: "SALE",
-        price: 25000000,
-        city: "Nairobi",
-        status: "ACTIVE",
-        isVerified: true,
-        isPremium: true,
-        views: 245,
-        ownerName: "John Kamau",
-        createdAt: "2024-10-15",
-      },
-      {
-        id: "2",
-        title: "Luxury Apartment in Kilimani",
-        propertyType: "APARTMENT",
-        listingType: "RENT",
-        price: 85000,
-        city: "Nairobi",
-        status: "PENDING",
-        isVerified: false,
-        isPremium: false,
-        views: 89,
-        ownerName: "Grace Wanjiku",
-        createdAt: "2024-11-01",
-      },
-      {
-        id: "3",
-        title: "Commercial Office Space",
-        propertyType: "COMMERCIAL",
-        listingType: "SALE",
-        price: 45000000,
-        city: "Mombasa",
-        status: "ACTIVE",
-        isVerified: true,
-        isPremium: false,
-        views: 156,
-        ownerName: "Peter Ochieng",
-        createdAt: "2024-09-20",
-      },
-      {
-        id: "4",
-        title: "Student Hostel in Westlands",
-        propertyType: "STUDENT_HOSTEL",
-        listingType: "RENT",
-        price: 12000,
-        city: "Nairobi",
-        status: "INACTIVE",
-        isVerified: true,
-        isPremium: true,
-        views: 78,
-        ownerName: "Mary Njeri",
-        createdAt: "2024-08-10",
-      },
-    ];
-    setProperties(mockProperties);
-    setLoading(false);
+    const fetchProperties = async () => {
+      try {
+        setLoading(true);
+        const response = await apiService.properties.getAll();
+        if (response.data.success) {
+          // Map properties to include missing fields for the table if necessary
+          const mappedProperties = response.data.data.map((p: any) => ({
+            ...p,
+            ownerName: p.agent?.firstName ? `${p.agent.firstName} ${p.agent.lastName || ''}` : 'Unknown Owner',
+            createdAt: p.createdAt ? new Date(p.createdAt).toISOString().split('T')[0] : 'N/A',
+          }));
+          setProperties(mappedProperties);
+        }
+      } catch (error) {
+        console.error("Error fetching properties:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProperties();
   }, []);
 
   const filteredProperties = properties.filter((property) => {
@@ -160,7 +124,9 @@ const AdminProperties: React.FC = () => {
       minimumFractionDigits: 0,
     }).format(price);
 
-    return listingType === "RENT" ? `${formatted}/month` : formatted;
+    return (listingType === "RENT" || listingType === "SHORT_TERM_RENT")
+      ? `${formatted}/${listingType === "RENT" ? 'month' : 'night'}`
+      : formatted;
   };
 
   const stats = {
@@ -188,9 +154,7 @@ const AdminProperties: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-6 mb-8">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                Total Properties
-              </CardTitle>
+              <CardTitle className="text-sm font-medium">Properties</CardTitle>
               <Home className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
@@ -208,9 +172,7 @@ const AdminProperties: React.FC = () => {
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                Pending Review
-              </CardTitle>
+              <CardTitle className="text-sm font-medium">Pending</CardTitle>
               <AlertTriangle className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
@@ -308,7 +270,7 @@ const AdminProperties: React.FC = () => {
                         <div>
                           <div className="font-medium">{property.title}</div>
                           <div className="text-sm text-gray-500">
-                            {property.listingType} • {property.propertyType}
+                            {getDisplayListingType(property.listingType)} • {property.propertyType}
                           </div>
                         </div>
                       </TableCell>

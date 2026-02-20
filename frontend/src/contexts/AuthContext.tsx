@@ -128,6 +128,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const token = localStorage.getItem("accessToken");
       if (token) {
         try {
+          console.log("AuthContext: Checking auth status with token...");
           const response = await apiService.users.getProfile();
           console.log("AuthContext: User profile loaded", {
             userId: response.data.data.id,
@@ -138,13 +139,38 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             type: AUTH_ACTIONS.SET_USER,
             payload: response.data.data,
           });
-        } catch (error) {
-          // Token is invalid, remove it
-          localStorage.removeItem("accessToken");
-          localStorage.removeItem("refreshToken");
+        } catch (error: any) {
+          console.error("AuthContext: Profile fetch failed", {
+            error: error.response?.data || error.message,
+            status: error.response?.status,
+            token: token ? "present" : "missing",
+          });
+
+          // Token is invalid, clear it
+          clearAuthState();
+
+          // If it's a 404 "User not found" error, it means the user was deleted
+          if (error.response?.status === 404) {
+            dispatch({
+              type: AUTH_ACTIONS.SET_ERROR,
+              payload: "User account not found. Please contact support.",
+            });
+          } else if (error.response?.status === 401) {
+            dispatch({
+              type: AUTH_ACTIONS.SET_ERROR,
+              payload: "Session expired. Please log in again.",
+            });
+          } else {
+            dispatch({
+              type: AUTH_ACTIONS.SET_ERROR,
+              payload: "Authentication failed. Please log in again.",
+            });
+          }
+
           dispatch({ type: AUTH_ACTIONS.SET_LOADING, payload: false });
         }
       } else {
+        console.log("AuthContext: No token found");
         dispatch({ type: AUTH_ACTIONS.SET_LOADING, payload: false });
       }
     };
@@ -180,17 +206,42 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const response = await apiService.auth.signIn(credentials);
       const { user, accessToken, refreshToken } = response.data.data;
 
+      // Log the user data to debug
+      console.log("Login response user data:", user);
+
+      // Ensure the user object has a role and it's uppercase for consistency
+      const userWithRole = {
+        ...user,
+        role: (user.role || "USER").toUpperCase(), // Default to 'USER' if role is not provided
+      };
+
+      console.log("User role after normalization:", userWithRole.role);
+
       // Store tokens
       localStorage.setItem("accessToken", accessToken);
       localStorage.setItem("refreshToken", refreshToken);
 
-      dispatch({ type: AUTH_ACTIONS.SET_USER, payload: user });
-      return { success: true, data: response.data };
+      // Dispatch the user with the role
+      dispatch({ type: AUTH_ACTIONS.SET_USER, payload: userWithRole });
+      return { 
+        success: true, 
+        data: {
+          ...response.data,
+          user: userWithRole // Make sure we return the user with normalized role
+        } 
+      };
     } catch (error: any) {
       const errorMessage = error.response?.data?.message || "Login failed";
       dispatch({ type: AUTH_ACTIONS.SET_ERROR, payload: errorMessage });
       return { success: false, error: errorMessage };
     }
+  };
+
+  // Clear authentication state (used for invalid tokens)
+  const clearAuthState = () => {
+    localStorage.removeItem("accessToken");
+    localStorage.removeItem("refreshToken");
+    dispatch({ type: AUTH_ACTIONS.LOGOUT });
   };
 
   // Logout function
@@ -201,9 +252,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       console.warn("Logout API call failed:", error);
     } finally {
       // Remove tokens regardless of API call success
-      localStorage.removeItem("accessToken");
-      localStorage.removeItem("refreshToken");
-      dispatch({ type: AUTH_ACTIONS.LOGOUT });
+      clearAuthState();
     }
   };
 

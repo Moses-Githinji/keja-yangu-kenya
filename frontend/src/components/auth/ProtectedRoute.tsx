@@ -5,11 +5,13 @@ import { useAuth } from "../../contexts/AuthContext";
 interface ProtectedRouteProps {
   children: React.ReactNode;
   requiredRole?: string;
+  allowedRoles?: string[];
 }
 
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   children,
   requiredRole,
+  allowedRoles,
 }) => {
   const { isAuthenticated, isLoading, user } = useAuth();
   const location = useLocation();
@@ -29,13 +31,49 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     return <Navigate to="/auth/signin" state={{ from: location }} replace />;
   }
 
+  // Check if user has required role (single role check)
   if (requiredRole && user?.role !== requiredRole) {
-    // User doesn't have required role, redirect to unauthorized page
-    console.log("ProtectedRoute: Access denied", {
+    console.log("ProtectedRoute: Access denied (requiredRole)", {
       userRole: user?.role,
       requiredRole,
       userId: user?.id,
     });
+    
+    // Redirect to appropriate dashboard based on user role
+    if (user?.role === 'HOST') {
+      return <Navigate to="/host/dashboard" replace />;
+    } else if (user?.role === 'AGENT') {
+      return <Navigate to="/agent" replace />;
+    } else if (user?.role === 'ADMIN') {
+      return <Navigate to="/system-admin" replace />;
+    }
+    
+    // Default to unauthorized if role doesn't match any known dashboard
+    return <Navigate to="/unauthorized" replace />;
+  }
+
+  // Check if user has one of the allowed roles (array check)
+  if (
+    allowedRoles &&
+    allowedRoles.length > 0 &&
+    !allowedRoles.includes(user?.role || "")
+  ) {
+    console.log("ProtectedRoute: Access denied (allowedRoles)", {
+      userRole: user?.role,
+      allowedRoles,
+      userId: user?.id,
+    });
+    
+    // Redirect to appropriate dashboard based on user role
+    if (user?.role === 'HOST') {
+      return <Navigate to="/host/dashboard" replace />;
+    } else if (user?.role === 'AGENT') {
+      return <Navigate to="/agent" replace />;
+    } else if (user?.role === 'ADMIN') {
+      return <Navigate to="/system-admin" replace />;
+    }
+    
+    // Default to unauthorized if role doesn't match any known dashboard
     return <Navigate to="/unauthorized" replace />;
   }
 

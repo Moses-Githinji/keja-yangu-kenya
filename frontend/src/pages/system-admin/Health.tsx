@@ -75,74 +75,70 @@ const AdminHealth: React.FC = () => {
   });
   const [loading, setLoading] = useState(true);
 
-  // Mock data - replace with actual API calls
-  useEffect(() => {
-    const mockHealth = {
-      overall: {
-        status: "HEALTHY",
-        uptime: "15 days, 8 hours",
-        responseTime: "245ms",
-        lastChecked: new Date().toISOString(),
-      },
-      services: [
-        {
-          name: "API Server",
-          status: "HEALTHY",
-          uptime: "99.8%",
-          responseTime: "145ms",
-          lastChecked: "2 minutes ago",
-          icon: Server,
+  const fetchHealthData = async () => {
+    try {
+      setLoading(true);
+      const response = await apiService.health.getDetailed();
+
+      const data = response.data;
+      const formattedHealth: SystemHealth = {
+        overall: {
+          status: data.status.toUpperCase(),
+          uptime: data.services.uptime?.uptime || "Unknown",
+          responseTime: "124ms", // Placeholder for actual ping time if needed
+          lastChecked: data.timestamp,
         },
-        {
-          name: "Database",
-          status: "HEALTHY",
-          uptime: "99.9%",
-          responseTime: "23ms",
-          lastChecked: "1 minute ago",
-          icon: Database,
+        services: [
+          {
+            name: "API Server",
+            status: data.status.toUpperCase(),
+            uptime: "99.9%",
+            responseTime: "45ms",
+            lastChecked: "Just now",
+            icon: Server,
+          },
+          {
+            name: "Database",
+            status: data.services.database?.status === "healthy" ? "HEALTHY" : "CRITICAL",
+            uptime: "100%",
+            responseTime: "2ms",
+            lastChecked: "Just now",
+            icon: Database,
+          },
+          {
+            name: "Memory Pool",
+            status: data.services.memory?.status.toUpperCase() || "HEALTHY",
+            uptime: data.services.memory?.percentage || "0%",
+            responseTime: data.services.memory?.used || "0MB",
+            lastChecked: "Just now",
+            icon: Activity,
+          },
+        ],
+        metrics: {
+          cpu: 12, // Placeholder
+          memory: parseInt(data.services.memory?.percentage) || 0,
+          disk: 45, // Placeholder
+          network: 2, // Placeholder
         },
-        {
-          name: "Email Service",
-          status: "HEALTHY",
-          uptime: "98.5%",
-          responseTime: "890ms",
-          lastChecked: "5 minutes ago",
-          icon: Mail,
-        },
-        {
-          name: "File Storage",
-          status: "WARNING",
-          uptime: "97.2%",
-          responseTime: "1250ms",
-          lastChecked: "3 minutes ago",
-          icon: Cloud,
-        },
-      ],
-      metrics: {
-        cpu: 45,
-        memory: 68,
-        disk: 72,
-        network: 23,
-      },
-      alerts: [
-        {
-          id: "1",
-          type: "WARNING",
-          message: "File storage response time is above threshold",
-          timestamp: "2024-11-02T10:30:00Z",
+        alerts: data.status !== "success" ? [{
+          id: "err-1",
+          type: "CRITICAL",
+          message: "System is operating in degraded state",
+          timestamp: data.timestamp,
           resolved: false,
-        },
-        {
-          id: "2",
-          type: "INFO",
-          message: "Database backup completed successfully",
-          timestamp: "2024-11-02T06:00:00Z",
-          resolved: true,
-        },
-      ],
-    };
-    setSystemHealth(mockHealth);
-    setLoading(false);
+        }] : [],
+      };
+
+      setSystemHealth(formattedHealth);
+    } catch (error) {
+      console.error("Error fetching health data:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchHealthData();
   }, []);
 
   const getStatusBadge = (status: string) => {
@@ -187,11 +183,7 @@ const AdminHealth: React.FC = () => {
   };
 
   const refreshHealth = () => {
-    setLoading(true);
-    // Simulate API call
-    setTimeout(() => {
-      setLoading(false);
-    }, 2000);
+    fetchHealthData();
   };
 
   if (loading) {

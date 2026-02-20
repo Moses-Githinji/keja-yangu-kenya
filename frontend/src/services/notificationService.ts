@@ -1,8 +1,9 @@
 import { toast } from "@/hooks/use-toast";
+import apiService from "./api";
 
 export interface Notification {
   id: string;
-  type: "message" | "property" | "payment" | "system" | "inquiry" | "reminder";
+  type: string;
   category: "urgent" | "important" | "normal" | "low";
   title: string;
   message: string;
@@ -11,13 +12,7 @@ export interface Notification {
   isArchived: boolean;
   isPinned: boolean;
   avatar?: string;
-  metadata?: {
-    propertyId?: string;
-    agentId?: string;
-    amount?: number;
-    location?: string;
-    [key: string]: any;
-  };
+  metadata?: any;
   action?: () => void;
 }
 
@@ -25,118 +20,36 @@ class NotificationService {
   private notifications: Notification[] = [];
   private listeners: ((notifications: Notification[]) => void)[] = [];
   private unreadCount = 0;
+  private isInitialized = false;
 
-  // Initialize with mock data
   constructor() {
-    this.loadMockNotifications();
+    // We'll call loadNotifications when explicitly needed or after auth
   }
 
-  // Load mock notifications
-  private loadMockNotifications() {
-    this.notifications = [
-      {
-        id: "1",
-        type: "message",
-        category: "urgent",
-        title: "New Message from Agent",
-        message:
-          "Sarah Kamau sent you a message about the property in Karen. She's available for a viewing this weekend.",
-        timestamp: new Date(Date.now() - 5 * 60 * 1000),
-        isRead: false,
-        isArchived: false,
-        isPinned: true,
-        avatar: "/api/placeholder/40/40",
-        metadata: {
-          propertyId: "prop-001",
-          agentId: "agent-001",
-          location: "Karen, Nairobi",
-        },
-      },
-      {
-        id: "2",
-        type: "property",
-        category: "important",
-        title: "Property View Update",
-        message:
-          "Your property in Westlands received 15 new views today and 3 new inquiries.",
-        timestamp: new Date(Date.now() - 30 * 60 * 1000),
-        isRead: false,
-        isArchived: false,
-        isPinned: false,
-        avatar: "/api/placeholder/40/40",
-        metadata: {
-          propertyId: "prop-002",
-          location: "Westlands, Nairobi",
-          views: 15,
-          inquiries: 3,
-        },
-      },
-      {
-        id: "3",
-        type: "payment",
-        category: "normal",
-        title: "Payment Received",
-        message:
-          "KES 2,500 has been credited to your account for property views this month.",
-        timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000),
-        isRead: true,
-        isArchived: false,
-        isPinned: false,
-        metadata: {
-          amount: 2500,
-          currency: "KES",
-        },
-      },
-      {
-        id: "4",
-        type: "system",
-        category: "low",
-        title: "Welcome to KejaYangu",
-        message:
-          "Your account has been successfully created. Start exploring properties and earning rewards!",
-        timestamp: new Date(Date.now() - 24 * 60 * 60 * 1000),
-        isRead: true,
-        isArchived: false,
-        isPinned: false,
-      },
-      {
-        id: "5",
-        type: "inquiry",
-        category: "urgent",
-        title: "New Property Inquiry",
-        message:
-          "John Doe is interested in your 3-bedroom apartment in Kilimani. Contact them within 24 hours.",
-        timestamp: new Date(Date.now() - 1 * 60 * 60 * 1000),
-        isRead: false,
-        isArchived: false,
-        isPinned: false,
-        avatar: "/api/placeholder/40/40",
-        metadata: {
-          propertyId: "prop-003",
-          location: "Kilimani, Nairobi",
-          contact: "john@example.com",
-        },
-      },
-      {
-        id: "6",
-        type: "reminder",
-        category: "important",
-        title: "Property Viewing Reminder",
-        message:
-          "You have a property viewing scheduled for tomorrow at 2:00 PM in Westlands.",
-        timestamp: new Date(Date.now() - 4 * 60 * 60 * 1000),
-        isRead: false,
-        isArchived: false,
-        isPinned: false,
-        metadata: {
-          propertyId: "prop-004",
-          location: "Westlands, Nairobi",
-          scheduledTime: "2024-01-16T14:00:00Z",
-        },
-      },
-    ];
-    this.updateUnreadCount();
-    this.notifyListeners();
+  // Load real notifications from API
+  async loadNotifications() {
+    try {
+      const response = await apiService.notifications.getAll();
+      if (response.data.status === "success") {
+        this.notifications = response.data.data.map((n: any) => ({
+          id: n.id,
+          type: n.type.toLowerCase(),
+          category: n.category || "normal",
+          title: n.title,
+          message: n.message,
+          timestamp: new Date(n.createdAt),
+          isRead: n.isRead,
+          isArchived: false, // Backend doesn't seem to have archive yet
+          isPinned: false,   // Backend doesn't seem to have pin yet
+          metadata: n.data ? JSON.parse(n.data) : {},
+        }));
+        this.isInitialized = true;
+        this.updateUnreadCount();
+        this.notifyListeners();
+      }
+    } catch (error) {
+      console.error("Failed to load notifications:", error);
+    }
   }
 
   // Get all notifications
@@ -145,20 +58,34 @@ class NotificationService {
   }
 
   // Get unread count
-  getUnreadCount(): number {
+  getUnreadCountValue(): number {
     return this.unreadCount;
   }
 
-  // Add new notification
+  // Fetch unread count from API
+  async fetchUnreadCount() {
+    try {
+      const response = await apiService.notifications.getUnreadCount();
+      if (response.data.status === "success") {
+        this.unreadCount = response.data.data.unreadCount;
+        this.notifyListeners();
+      }
+    } catch (error) {
+      console.error("Failed to fetch unread count:", error);
+    }
+  }
+
+  // Add new notification (local only or handled by backend)
   addNotification(
     notification: Omit<
       Notification,
       "id" | "timestamp" | "isRead" | "isArchived" | "isPinned"
     >
   ): string {
+    const id = Date.now().toString();
     const newNotification: Notification = {
       ...notification,
-      id: Date.now().toString(),
+      id,
       timestamp: new Date(),
       isRead: false,
       isArchived: false,
@@ -166,93 +93,76 @@ class NotificationService {
     };
 
     this.notifications.unshift(newNotification);
-    this.updateUnreadCount();
+    this.unreadCount++;
     this.notifyListeners();
 
-    // Show toast notification
     toast({
       title: notification.title,
       description: notification.message,
       variant: notification.category === "urgent" ? "destructive" : "default",
     });
 
-    return newNotification.id;
+    return id;
   }
 
   // Mark notification as read
-  markAsRead(id: string): void {
-    const notification = this.notifications.find((n) => n.id === id);
-    if (notification && !notification.isRead) {
-      notification.isRead = true;
-      this.updateUnreadCount();
-      this.notifyListeners();
+  async markAsRead(id: string) {
+    try {
+      const notification = this.notifications.find((n) => n.id === id);
+      if (notification && !notification.isRead) {
+        await apiService.notifications.markAsRead(id);
+        notification.isRead = true;
+        this.updateUnreadCount();
+        this.notifyListeners();
+      }
+    } catch (error) {
+      console.error("Failed to mark notification as read:", error);
     }
   }
 
   // Mark all as read
-  markAllAsRead(): void {
-    let hasChanges = false;
-    this.notifications.forEach((notification) => {
-      if (!notification.isRead) {
-        notification.isRead = true;
-        hasChanges = true;
-      }
-    });
-
-    if (hasChanges) {
+  async markAllAsRead() {
+    try {
+      await apiService.notifications.markAllAsRead();
+      this.notifications.forEach((n) => {
+        n.isRead = true;
+      });
       this.updateUnreadCount();
       this.notifyListeners();
-    }
-  }
-
-  // Toggle pin notification
-  togglePin(id: string): void {
-    const notification = this.notifications.find((n) => n.id === id);
-    if (notification) {
-      notification.isPinned = !notification.isPinned;
-      this.notifyListeners();
-    }
-  }
-
-  // Archive notification
-  archiveNotification(id: string): void {
-    const notification = this.notifications.find((n) => n.id === id);
-    if (notification && !notification.isArchived) {
-      notification.isArchived = true;
-      this.updateUnreadCount();
-      this.notifyListeners();
+    } catch (error) {
+      console.error("Failed to mark all notifications as read:", error);
     }
   }
 
   // Delete notification
-  deleteNotification(id: string): void {
-    const index = this.notifications.findIndex((n) => n.id === id);
-    if (index !== -1) {
-      const notification = this.notifications[index];
-      if (!notification.isRead) {
-        this.unreadCount--;
+  async deleteNotification(id: string) {
+    try {
+      await apiService.notifications.deleteNotification(id);
+      const index = this.notifications.findIndex((n) => n.id === id);
+      if (index !== -1) {
+        if (!this.notifications[index].isRead) {
+          this.unreadCount--;
+        }
+        this.notifications.splice(index, 1);
+        this.notifyListeners();
       }
-      this.notifications.splice(index, 1);
+    } catch (error) {
+      console.error("Failed to delete notification:", error);
+    }
+  }
+
+  // Clear all read
+  async clearRead() {
+    try {
+      await apiService.notifications.clearRead();
+      this.notifications = this.notifications.filter((n) => !n.isRead);
       this.notifyListeners();
+    } catch (error) {
+      console.error("Failed to clear read notifications:", error);
     }
   }
 
-  // Bulk actions
-  bulkAction(ids: string[], action: "read" | "archive" | "delete"): void {
-    switch (action) {
-      case "read":
-        ids.forEach((id) => this.markAsRead(id));
-        break;
-      case "archive":
-        ids.forEach((id) => this.archiveNotification(id));
-        break;
-      case "delete":
-        ids.forEach((id) => this.deleteNotification(id));
-        break;
-    }
-  }
-
-  // Update unread count
+  // Update unread count locally (best effort)
   private updateUnreadCount(): void {
     this.unreadCount = this.notifications.filter(
       (n) => !n.isRead && !n.isArchived
@@ -262,7 +172,13 @@ class NotificationService {
   // Subscribe to notifications changes
   subscribe(listener: (notifications: Notification[]) => void): () => void {
     this.listeners.push(listener);
-    listener(this.notifications); // Initial call
+    
+    // If not initialized, trigger load
+    if (!this.isInitialized) {
+      this.loadNotifications();
+    } else {
+      listener(this.notifications);
+    }
 
     return () => {
       const index = this.listeners.indexOf(listener);
@@ -272,48 +188,10 @@ class NotificationService {
     };
   }
 
-  // Notify all listeners
   private notifyListeners(): void {
-    this.listeners.forEach((listener) => listener([...this.notifications]));
-  }
-
-  // Simulate real-time notifications (for demo purposes)
-  startRealTimeSimulation(): void {
-    setInterval(() => {
-      // Randomly add new notifications
-      if (Math.random() < 0.1) {
-        // 10% chance every interval
-        const types: Notification["type"][] = [
-          "message",
-          "property",
-          "payment",
-          "inquiry",
-        ];
-        const categories: Notification["category"][] = [
-          "urgent",
-          "important",
-          "normal",
-        ];
-
-        this.addNotification({
-          type: types[Math.floor(Math.random() * types.length)],
-          category: categories[Math.floor(Math.random() * categories.length)],
-          title: "New Activity",
-          message: "You have new activity on your account. Check it out!",
-          metadata: {},
-        });
-      }
-    }, 30000); // Every 30 seconds
-  }
-
-  // Stop real-time simulation
-  stopRealTimeSimulation(): void {
-    // Implementation would clear intervals
+    const list = [...this.notifications];
+    this.listeners.forEach((listener) => listener(list));
   }
 }
 
-// Export singleton instance
 export const notificationService = new NotificationService();
-
-// Start real-time simulation for demo
-notificationService.startRealTimeSimulation();

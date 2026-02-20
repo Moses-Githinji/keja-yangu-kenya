@@ -26,14 +26,19 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiService } from "@/services/api";
-import { useNavigate } from "react-router-dom";
+import AddPropertyModal from "@/components/properties/AddPropertyModal";
 
 const AgentDashboard: React.FC = () => {
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [isAddPropertyModalOpen, setIsAddPropertyModalOpen] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
   const { toast } = useToast();
   const { user } = useAuth();
-  const navigate = useNavigate();
+
+  const refreshDashboard = () => {
+    setRefreshKey(prev => prev + 1);
+  };
 
   useEffect(() => {
     const fetchDashboardStats = async () => {
@@ -98,7 +103,7 @@ const AgentDashboard: React.FC = () => {
     if (user?.id) {
       fetchDashboardStats();
     }
-  }, [toast, user?.id]);
+  }, [user?.id, toast, refreshKey]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -280,7 +285,7 @@ const AgentDashboard: React.FC = () => {
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 gap-4">
                 <Button
-                  onClick={() => navigate("/add-property")}
+                  onClick={() => setIsAddPropertyModalOpen(true)}
                   className="p-4 h-auto justify-start"
                   variant="outline"
                 >
@@ -293,7 +298,7 @@ const AgentDashboard: React.FC = () => {
                   </div>
                 </Button>
                 <Button
-                  onClick={() => navigate("/agent/properties")}
+                  onClick={() => (window.location.href = "/agent/properties")}
                   className="p-4 h-auto justify-start"
                   variant="outline"
                 >
@@ -306,7 +311,7 @@ const AgentDashboard: React.FC = () => {
                   </div>
                 </Button>
                 <Button
-                  onClick={() => navigate("/agent/finance")}
+                  onClick={() => (window.location.href = "/agent/finance")}
                   className="p-4 h-auto justify-start"
                   variant="outline"
                 >
@@ -375,6 +380,20 @@ const AgentDashboard: React.FC = () => {
           </Card>
         </div>
       </div>
+
+      {/* Add Property Modal */}
+      <AddPropertyModal
+        isOpen={isAddPropertyModalOpen}
+        onClose={() => setIsAddPropertyModalOpen(false)}
+        onSuccess={() => {
+          refreshDashboard();
+          toast({
+            title: "Success",
+            description: "Property added successfully",
+            variant: "default",
+          });
+        }}
+      />
     </AdminLayout>
   );
 };

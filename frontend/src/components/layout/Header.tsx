@@ -126,6 +126,12 @@ const Header = () => {
             >
               Rent
             </Link>
+            <Link
+              to="/brief-stay"
+              className="text-foreground hover:text-primary transition-colors"
+            >
+              Brief Stay
+            </Link>
             {user?.role === "AGENT" || user?.role === "ADMIN" ? null : (
               <button
                 onClick={() => {
@@ -375,6 +381,12 @@ const Header = () => {
                 className="text-foreground hover:text-primary transition-colors"
               >
                 Rent
+              </Link>
+              <Link
+                to="/brief-stay"
+                className="text-foreground hover:text-primary transition-colors"
+              >
+                Brief Stay
               </Link>
               {user?.role === "AGENT" || user?.role === "ADMIN" ? null : (
                 <button

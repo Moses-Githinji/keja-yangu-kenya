@@ -6,6 +6,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { ToastProvider } from "@/components/ui/toast-container";
 import { AuthProvider } from "./contexts/AuthContext";
+import { SocketProvider } from "./contexts/SocketContext";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 import BecomeAgentModal from "./components/auth/BecomeAgentModal";
 
@@ -13,6 +14,8 @@ import BecomeAgentModal from "./components/auth/BecomeAgentModal";
 import Index from "./pages/Index";
 import Buy from "./pages/Buy";
 import Rent from "./pages/Rent";
+import BriefStay from "./pages/BriefStay";
+import BriefStayHost from "./pages/BriefStayHost";
 import PropertyDetails from "./pages/PropertyDetails";
 import NotFound from "./pages/NotFound";
 
@@ -48,24 +51,31 @@ import PrivacyPolicy from "./pages/PrivacyPolicy";
 import UnauthorizedAccess from "./pages/UnauthorizedAccess";
 
 // System Admin Pages
-import AdminOverview from "./pages/system-admin/index";
-import AdminUsers from "./pages/system-admin/Users.tsx";
-import AdminAgents from "./pages/system-admin/Agents.tsx";
-import AdminProperties from "./pages/system-admin/Properties.tsx";
-import AdminFinance from "./pages/system-admin/Finance.tsx";
-import AdminHealth from "./pages/system-admin/Health.tsx";
-import AdminMessages from "./pages/system-admin/Messages.tsx";
-import AdminSettings from "./pages/system-admin/Settings";
+import SystemAdminDashboard from "./pages/system-admin";
+import SystemAdminUsers from "./pages/system-admin/Users";
+import SystemAdminAgents from "./pages/system-admin/Agents";
+import SystemAdminProperties from "./pages/system-admin/Properties";
+import SystemAdminFinance from "./pages/system-admin/Finance";
+import SystemAdminHealth from "./pages/system-admin/Health";
+import SystemAdminMessages from "./pages/system-admin/Messages";
+import SystemAdminSettings from "./pages/system-admin/Settings";
+import SystemAdminBilling from "./pages/system-admin/Billing";
 
 // Agent Pages
 import BecomeAgent from "./pages/BecomeAgent";
-import AddProperty from "./pages/AddProperty";
 import Agents from "./pages/agent/Agents.tsx";
 import AgentDashboard from "./pages/agent";
 import AgentProperties from "./pages/agent/Properties.tsx";
 import AgentFinance from "./pages/agent/Finance.tsx";
 import AgentHealth from "./pages/agent/Health.tsx";
 import AgentApplications from "./pages/agent/Agent.tsx";
+import AgentAddProperty from "./pages/agent/AddProperty.tsx";
+import EditProperty from "./pages/agent/EditProperty.tsx";
+import AgentMessages from "./pages/agent/Messages";
+import AgentSettings from "./pages/agent/Settings";
+
+// Host Dashboard
+import HostDashboard from "./pages/host";
 
 // Test Component
 import ApiTestComponent from "./components/api-test/ApiTestComponent";
@@ -102,7 +112,8 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <TooltipProvider>
+        <SocketProvider>
+          <TooltipProvider>
           <ToastProvider>
             <Router
               future={{
@@ -114,7 +125,11 @@ function App() {
                 <Route path="/" element={<Index />} />
                 <Route path="/buy" element={<Buy />} />
                 <Route path="/rent" element={<Rent />} />
-                <Route path="/property/:id" element={<PropertyDetails />} />
+                <Route path="/brief-stay" element={<BriefStay />} />
+                <Route
+                  path="/property/:propertyId"
+                  element={<PropertyDetails />}
+                />
                 <Route path="/agents" element={<Agents />} />
 
                 {/* Auth Routes */}
@@ -214,7 +229,7 @@ function App() {
                   path="/system-admin"
                   element={
                     <ProtectedRoute requiredRole="ADMIN">
-                      <AdminOverview />
+                      <SystemAdminDashboard />
                     </ProtectedRoute>
                   }
                 />
@@ -222,47 +237,47 @@ function App() {
                   path="/system-admin/users"
                   element={
                     <ProtectedRoute requiredRole="ADMIN">
-                      <AdminUsers />
+                      <SystemAdminUsers />
                     </ProtectedRoute>
                   }
                 />
                 <Route
                   path="/system-admin/agents"
                   element={
-                    <ProtectedRoute requiredRole="ADMIN">
-                      <AdminAgents />
+                    <ProtectedRoute allowedRoles={["ADMIN"]}>
+                      <SystemAdminAgents />
                     </ProtectedRoute>
                   }
                 />
                 <Route
                   path="/system-admin/properties"
                   element={
-                    <ProtectedRoute requiredRole="ADMIN">
-                      <AdminProperties />
+                    <ProtectedRoute allowedRoles={["ADMIN"]}>
+                      <SystemAdminProperties />
                     </ProtectedRoute>
                   }
                 />
                 <Route
                   path="/system-admin/finance"
                   element={
-                    <ProtectedRoute requiredRole="ADMIN">
-                      <AdminFinance />
+                    <ProtectedRoute allowedRoles={["ADMIN"]}>
+                      <SystemAdminFinance />
                     </ProtectedRoute>
                   }
                 />
                 <Route
                   path="/system-admin/health"
                   element={
-                    <ProtectedRoute requiredRole="ADMIN">
-                      <AdminHealth />
+                    <ProtectedRoute allowedRoles={["ADMIN"]}>
+                      <SystemAdminHealth />
                     </ProtectedRoute>
                   }
                 />
                 <Route
                   path="/system-admin/messages"
                   element={
-                    <ProtectedRoute requiredRole="ADMIN">
-                      <AdminMessages />
+                    <ProtectedRoute allowedRoles={["ADMIN"]}>
+                      <SystemAdminMessages />
                     </ProtectedRoute>
                   }
                 />
@@ -270,41 +285,18 @@ function App() {
                   path="/system-admin/settings"
                   element={
                     <ProtectedRoute requiredRole="ADMIN">
-                      <AdminSettings />
+                      <SystemAdminSettings />
                     </ProtectedRoute>
                   }
                 />
 
-                {/* Agent Routes */}
+
+                {/* Agent Routes - Only accessible to AGENT role */}
                 <Route path="/become-agent" element={<BecomeAgent />} />
-                <Route
-                  path="/add-property"
-                  element={
-                    <ProtectedRoute requiredRole="AGENT">
-                      <AddProperty />
-                    </ProtectedRoute>
-                  }
-                />
                 <Route
                   path="/agent"
                   element={
-                    <ProtectedRoute requiredRole="AGENT">
-                      <AgentDashboard />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/agent/*"
-                  element={
-                    <ProtectedRoute requiredRole="AGENT">
-                      <AgentDashboard />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/agent/dashboard"
-                  element={
-                    <ProtectedRoute requiredRole="AGENT">
+                    <ProtectedRoute allowedRoles={["AGENT"]}>
                       <AgentDashboard />
                     </ProtectedRoute>
                   }
@@ -312,7 +304,7 @@ function App() {
                 <Route
                   path="/agent/properties"
                   element={
-                    <ProtectedRoute requiredRole="AGENT">
+                    <ProtectedRoute allowedRoles={["AGENT"]}>
                       <AgentProperties />
                     </ProtectedRoute>
                   }
@@ -320,7 +312,7 @@ function App() {
                 <Route
                   path="/agent/finance"
                   element={
-                    <ProtectedRoute requiredRole="AGENT">
+                    <ProtectedRoute allowedRoles={["AGENT"]}>
                       <AgentFinance />
                     </ProtectedRoute>
                   }
@@ -328,7 +320,7 @@ function App() {
                 <Route
                   path="/agent/health"
                   element={
-                    <ProtectedRoute requiredRole="AGENT">
+                    <ProtectedRoute allowedRoles={["AGENT"]}>
                       <AgentHealth />
                     </ProtectedRoute>
                   }
@@ -336,8 +328,48 @@ function App() {
                 <Route
                   path="/agent/applications"
                   element={
-                    <ProtectedRoute requiredRole="AGENT">
+                    <ProtectedRoute allowedRoles={["AGENT"]}>
                       <AgentApplications />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/agent/properties/add"
+                  element={
+                    <ProtectedRoute allowedRoles={["AGENT"]}>
+                      <AgentAddProperty />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/agent/properties/edit/:id"
+                  element={
+                    <ProtectedRoute allowedRoles={["AGENT"]}>
+                      <EditProperty />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/agent/add-property"
+                  element={
+                    <ProtectedRoute allowedRoles={["AGENT"]}>
+                      <AgentAddProperty />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/agent/messages"
+                  element={
+                    <ProtectedRoute allowedRoles={["AGENT"]}>
+                      <AgentMessages />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/agent/settings"
+                  element={
+                    <ProtectedRoute allowedRoles={["AGENT"]}>
+                      <AgentSettings />
                     </ProtectedRoute>
                   }
                 />
@@ -349,6 +381,56 @@ function App() {
                 {/* Legal Routes */}
                 <Route path="/terms" element={<TermsAndConditions />} />
                 <Route path="/privacy" element={<PrivacyPolicy />} />
+
+                {/* Host Routes - Only accessible to HOST role */}
+                <Route
+                  path="/host/dashboard"
+                  element={
+                    <ProtectedRoute requiredRole="HOST">
+                      <HostDashboard />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/host/properties"
+                  element={
+                    <ProtectedRoute requiredRole="HOST">
+                      <div>Host Properties (Coming Soon)</div>
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/host/bookings"
+                  element={
+                    <ProtectedRoute requiredRole="HOST">
+                      <div>Host Bookings (Coming Soon)</div>
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/host/earnings"
+                  element={
+                    <ProtectedRoute requiredRole="HOST">
+                      <div>Host Earnings (Coming Soon)</div>
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/host/messages"
+                  element={
+                    <ProtectedRoute requiredRole="HOST">
+                      <div>Host Messages (Coming Soon)</div>
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/host/settings"
+                  element={
+                    <ProtectedRoute requiredRole="HOST">
+                      <div>Host Settings (Coming Soon)</div>
+                    </ProtectedRoute>
+                  }
+                />
 
                 {/* 404 Route */}
                 <Route path="*" element={<NotFound />} />
@@ -364,9 +446,10 @@ function App() {
             <Sonner />
           </ToastProvider>
         </TooltipProvider>
-      </AuthProvider>
-    </QueryClientProvider>
-  );
+      </SocketProvider>
+    </AuthProvider>
+  </QueryClientProvider>
+);
 }
 
 export default App;

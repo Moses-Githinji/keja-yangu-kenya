@@ -46,26 +46,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
-interface Notification {
-  id: string;
-  type: "message" | "property" | "payment" | "system" | "inquiry" | "reminder";
-  category: "urgent" | "important" | "normal" | "low";
-  title: string;
-  message: string;
-  timestamp: Date;
-  isRead: boolean;
-  isArchived: boolean;
-  isPinned: boolean;
-  avatar?: string;
-  metadata?: {
-    propertyId?: string;
-    agentId?: string;
-    amount?: number;
-    location?: string;
-    [key: string]: any;
-  };
-  action?: () => void;
-}
+import { notificationService, Notification } from "@/services/notificationService";
 
 const Notifications = () => {
   const navigate = useNavigate();
@@ -87,125 +68,18 @@ const Notifications = () => {
     []
   );
 
-  // Mock notifications data - replace with real API calls
-  const mockNotifications: Notification[] = [
-    {
-      id: "1",
-      type: "message",
-      category: "urgent",
-      title: "New Message from Agent",
-      message:
-        "Sarah Kamau sent you a message about the property in Karen. She's available for a viewing this weekend.",
-      timestamp: new Date(Date.now() - 5 * 60 * 1000),
-      isRead: false,
-      isArchived: false,
-      isPinned: true,
-      avatar: "/api/placeholder/40/40",
-      metadata: {
-        propertyId: "prop-001",
-        agentId: "agent-001",
-        location: "Karen, Nairobi",
-      },
-      action: () => navigate("/messages"),
-    },
-    {
-      id: "2",
-      type: "property",
-      category: "important",
-      title: "Property View Update",
-      message:
-        "Your property in Westlands received 15 new views today and 3 new inquiries.",
-      timestamp: new Date(Date.now() - 30 * 60 * 1000),
-      isRead: false,
-      isArchived: false,
-      isPinned: false,
-      avatar: "/api/placeholder/40/40",
-      metadata: {
-        propertyId: "prop-002",
-        location: "Westlands, Nairobi",
-        views: 15,
-        inquiries: 3,
-      },
-      action: () => navigate("/dashboard"),
-    },
-    {
-      id: "3",
-      type: "payment",
-      category: "normal",
-      title: "Payment Received",
-      message:
-        "KES 2,500 has been credited to your account for property views this month.",
-      timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000),
-      isRead: true,
-      isArchived: false,
-      isPinned: false,
-      avatar: "/api/placeholder/40/40",
-      metadata: {
-        amount: 2500,
-        currency: "KES",
-      },
-      action: () => navigate("/account"),
-    },
-    {
-      id: "4",
-      type: "system",
-      category: "low",
-      title: "Welcome to KejaYangu",
-      message:
-        "Your account has been successfully created. Start exploring properties and earning rewards!",
-      timestamp: new Date(Date.now() - 24 * 60 * 60 * 1000),
-      isRead: true,
-      isArchived: false,
-      isPinned: false,
-      action: () => navigate("/dashboard"),
-    },
-    {
-      id: "5",
-      type: "inquiry",
-      category: "urgent",
-      title: "New Property Inquiry",
-      message:
-        "John Doe is interested in your 3-bedroom apartment in Kilimani. Contact them within 24 hours.",
-      timestamp: new Date(Date.now() - 1 * 60 * 60 * 1000),
-      isRead: false,
-      isArchived: false,
-      isPinned: false,
-      avatar: "/api/placeholder/40/40",
-      metadata: {
-        propertyId: "prop-003",
-        location: "Kilimani, Nairobi",
-        contact: "john@example.com",
-      },
-      action: () => navigate("/messages"),
-    },
-    {
-      id: "6",
-      type: "reminder",
-      category: "important",
-      title: "Property Viewing Reminder",
-      message:
-        "You have a property viewing scheduled for tomorrow at 2:00 PM in Westlands.",
-      timestamp: new Date(Date.now() - 4 * 60 * 60 * 1000),
-      isRead: false,
-      isArchived: false,
-      isPinned: false,
-      metadata: {
-        propertyId: "prop-004",
-        location: "Westlands, Nairobi",
-        scheduledTime: "2024-01-16T14:00:00Z",
-      },
-      action: () => navigate("/dashboard"),
-    },
-  ];
-
   useEffect(() => {
     if (!isAuthenticated) {
       navigate("/auth/signin");
       return;
     }
 
-    // Load notifications
-    setNotifications(mockNotifications);
+    // Subscribe to notification service
+    const unsubscribe = notificationService.subscribe((newNotifications) => {
+      setNotifications(newNotifications);
+    });
+
+    return () => unsubscribe();
   }, [isAuthenticated, navigate]);
 
   // Filter and sort notifications
@@ -326,10 +200,8 @@ const Notifications = () => {
   };
 
   // Mark notification as read
-  const markAsRead = (notificationId: string) => {
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === notificationId ? { ...n, isRead: true } : n))
-    );
+  const markAsRead = async (notificationId: string) => {
+    await notificationService.markAsRead(notificationId);
     toast({
       title: "Marked as read",
       description: "Notification marked as read",
@@ -338,8 +210,8 @@ const Notifications = () => {
   };
 
   // Mark all as read
-  const markAllAsRead = () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+  const markAllAsRead = async () => {
+    await notificationService.markAllAsRead();
     toast({
       title: "All marked as read",
       description: "All notifications marked as read",
@@ -349,6 +221,7 @@ const Notifications = () => {
 
   // Toggle pin notification
   const togglePin = (notificationId: string) => {
+    // Note: Pinning is local or would need backend support
     setNotifications((prev) =>
       prev.map((n) =>
         n.id === notificationId ? { ...n, isPinned: !n.isPinned } : n
@@ -358,11 +231,7 @@ const Notifications = () => {
 
   // Archive notification
   const archiveNotification = (notificationId: string) => {
-    setNotifications((prev) =>
-      prev.map((n) =>
-        n.id === notificationId ? { ...n, isArchived: true } : n
-      )
-    );
+    notificationService.deleteNotification(notificationId); // For now just delete/archive
     toast({
       title: "Archived",
       description: "Notification moved to archive",
@@ -371,8 +240,8 @@ const Notifications = () => {
   };
 
   // Delete notification
-  const deleteNotification = (notificationId: string) => {
-    setNotifications((prev) => prev.filter((n) => n.id !== notificationId));
+  const deleteNotification = async (notificationId: string) => {
+    await notificationService.deleteNotification(notificationId);
     toast({
       title: "Deleted",
       description: "Notification deleted successfully",

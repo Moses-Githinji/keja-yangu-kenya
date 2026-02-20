@@ -298,15 +298,18 @@ const Agents = () => {
                           Specializations:
                         </p>
                         <div className="flex flex-wrap gap-1">
-                          {agent.agentProfile.specializations?.map((spec) => (
-                            <Badge
-                              key={spec}
-                              variant="outline"
-                              className="text-xs"
-                            >
-                              {spec}
-                            </Badge>
-                          )) || (
+                          {Array.isArray(agent.agentProfile.specializations) &&
+                          agent.agentProfile.specializations.length > 0 ? (
+                            agent.agentProfile.specializations.map((spec) => (
+                              <Badge
+                                key={spec}
+                                variant="outline"
+                                className="text-xs"
+                              >
+                                {spec}
+                              </Badge>
+                            ))
+                          ) : (
                             <span className="text-sm text-muted-foreground">
                               Not specified
                             </span>

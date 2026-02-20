@@ -53,14 +53,13 @@ interface AgentApplication {
   lastName: string;
   email: string;
   phone: string;
+  company: string;
+  licenseNumber: string;
+  experience: string;
+  specializations: string[];
   status: "PENDING" | "APPROVED" | "REJECTED";
-  createdAt: string;
-  agentProfile?: {
-    company: string;
-    licenseNumber: string;
-    experience: string;
-    specialization: string[];
-  };
+  submittedAt: string;
+  approvedAt?: string;
 }
 
 const AgentApplications: React.FC = () => {
@@ -79,40 +78,14 @@ const AgentApplications: React.FC = () => {
   const fetchApplications = async () => {
     try {
       setLoading(true);
-      // Mock data for now - replace with actual API call
-      const mockApplications: AgentApplication[] = [
-        {
-          id: "1",
-          firstName: "Sarah",
-          lastName: "Kamau",
-          email: "sarah.kamau@example.com",
-          phone: "+254712345678",
-          status: "PENDING",
-          createdAt: "2024-11-05T10:00:00Z",
-          agentProfile: {
-            company: "Kamau Properties Ltd",
-            licenseNumber: "KE-REAL-2024-001",
-            experience: "5 years",
-            specialization: ["Residential", "Commercial"],
-          },
-        },
-        {
-          id: "2",
-          firstName: "David",
-          lastName: "Njenga",
-          email: "david.njenga@example.com",
-          phone: "+254723456789",
-          status: "APPROVED",
-          createdAt: "2024-11-04T14:30:00Z",
-          agentProfile: {
-            company: "Njenga Real Estate",
-            licenseNumber: "KE-REAL-2024-002",
-            experience: "8 years",
-            specialization: ["Luxury Homes", "Land"],
-          },
-        },
-      ];
-      setApplications(mockApplications);
+      const response = await apiService.agents.getApplications({
+        status: statusFilter === "all" ? "ALL" : statusFilter,
+        search: searchTerm,
+      });
+
+      if (response.data.status === "success") {
+        setApplications(response.data.data);
+      }
     } catch (error) {
       console.error("Error fetching applications:", error);
       toast({
@@ -130,18 +103,21 @@ const AgentApplications: React.FC = () => {
     newStatus: "APPROVED" | "REJECTED"
   ) => {
     try {
-      // Mock API call - replace with actual implementation
-      setApplications((prev) =>
-        prev.map((app) =>
-          app.id === applicationId ? { ...app, status: newStatus } : app
-        )
-      );
+      if (newStatus === "APPROVED") {
+        await apiService.agents.approveApplication(applicationId);
+      } else {
+        await apiService.agents.rejectApplication(applicationId, "Application rejected by administrator");
+      }
+
+      // Refresh list after update
+      fetchApplications();
 
       toast({
         title: "Success",
         description: `Application ${newStatus.toLowerCase()} successfully`,
       });
     } catch (error) {
+      console.error("Error updating application status:", error);
       toast({
         title: "Error",
         description: "Failed to update application status",
@@ -339,11 +315,11 @@ const AgentApplications: React.FC = () => {
                       </div>
                     </TableCell>
                     <TableCell>
-                      {application.agentProfile?.company || "N/A"}
+                      {application.company || "N/A"}
                     </TableCell>
                     <TableCell>{getStatusBadge(application.status)}</TableCell>
                     <TableCell>
-                      {new Date(application.createdAt).toLocaleDateString()}
+                      {new Date(application.submittedAt).toLocaleDateString()}
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center space-x-2">
@@ -403,58 +379,49 @@ const AgentApplications: React.FC = () => {
                                   </div>
                                 </div>
 
-                                {selectedApplication.agentProfile && (
-                                  <div className="space-y-4">
-                                    <h4 className="font-medium">
-                                      Agent Profile
-                                    </h4>
-                                    <div className="grid grid-cols-2 gap-4">
-                                      <div>
-                                        <label className="text-sm font-medium">
-                                          Company
-                                        </label>
-                                        <p>
-                                          {
-                                            selectedApplication.agentProfile
-                                              .company
-                                          }
-                                        </p>
-                                      </div>
-                                      <div>
-                                        <label className="text-sm font-medium">
-                                          License Number
-                                        </label>
-                                        <p>
-                                          {
-                                            selectedApplication.agentProfile
-                                              .licenseNumber
-                                          }
-                                        </p>
-                                      </div>
-                                      <div>
-                                        <label className="text-sm font-medium">
-                                          Experience
-                                        </label>
-                                        <p>
-                                          {
-                                            selectedApplication.agentProfile
-                                              .experience
-                                          }
-                                        </p>
-                                      </div>
-                                      <div>
-                                        <label className="text-sm font-medium">
-                                          Specialization
-                                        </label>
-                                        <p>
-                                          {selectedApplication.agentProfile.specialization.join(
-                                            ", "
-                                          )}
-                                        </p>
+                                  {selectedApplication.company && (
+                                    <div className="space-y-4">
+                                      <h4 className="font-medium">
+                                        Agent Profile
+                                      </h4>
+                                      <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                          <label className="text-sm font-medium">
+                                            Company
+                                          </label>
+                                          <p>
+                                            {selectedApplication.company}
+                                          </p>
+                                        </div>
+                                        <div>
+                                          <label className="text-sm font-medium">
+                                            License Number
+                                          </label>
+                                          <p>
+                                            {selectedApplication.licenseNumber}
+                                          </p>
+                                        </div>
+                                        <div>
+                                          <label className="text-sm font-medium">
+                                            Experience
+                                          </label>
+                                          <p>
+                                            {selectedApplication.experience}
+                                          </p>
+                                        </div>
+                                        <div>
+                                          <label className="text-sm font-medium">
+                                            Specialization
+                                          </label>
+                                          <p>
+                                            {selectedApplication.specializations?.join(
+                                              ", "
+                                            ) || "None"}
+                                          </p>
+                                        </div>
                                       </div>
                                     </div>
-                                  </div>
-                                )}
+                                  )}
 
                                 {selectedApplication.status === "PENDING" && (
                                   <div className="flex space-x-2 pt-4">

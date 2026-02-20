@@ -6,8 +6,8 @@ import { normalizeListingType } from "@/utils/propertyUtils";
 export interface SearchFilters {
   q?: string; // general search query
   propertyType?: string;
-  listingType?: "SALE" | "RENT";
-  status?: 'AVAILABLE' | 'PENDING' | 'SOLD' | 'RENTED';
+  listingType?: "SALE" | "RENT" | "SHORT_TERM_RENT";
+  status?: "AVAILABLE" | "PENDING" | "SOLD" | "RENTED";
   minPrice?: number;
   maxPrice?: number;
   minBedrooms?: number;
@@ -57,7 +57,7 @@ export const useSearch = (initialFilters: SearchFilters = {}) => {
     }
 
     const timeout = setTimeout(() => {
-      console.log('Setting debounced query:', searchQuery);
+      console.log("Setting debounced query:", searchQuery);
       setDebouncedQuery(searchQuery);
     }, 500); // Reduced to 500ms for better UX
 
@@ -78,56 +78,94 @@ export const useSearch = (initialFilters: SearchFilters = {}) => {
         // Normalize listingType if it exists
         const normalizedParams = {
           ...searchParams,
-          ...(searchParams.listingType && { 
-            listingType: normalizeListingType(searchParams.listingType) 
-          })
+          ...(searchParams.listingType && {
+            listingType: normalizeListingType(searchParams.listingType),
+          }),
         };
-        
-        console.log('Final search params:', JSON.stringify(normalizedParams, null, 2));
+
+        console.log(
+          "Final search params:",
+          JSON.stringify(normalizedParams, null, 2)
+        );
 
         // Remove undefined values
         Object.keys(normalizedParams).forEach((key) => {
-          if (normalizedParams[key as keyof typeof normalizedParams] === undefined) {
+          if (
+            normalizedParams[key as keyof typeof normalizedParams] === undefined
+          ) {
             delete normalizedParams[key as keyof typeof normalizedParams];
           }
         });
 
         console.log("Search params:", normalizedParams); // Debug log
 
-        const response = await apiService.search.searchProperties(normalizedParams);
-      setResults(response.data);
+        const response = await apiService.search.searchProperties(
+          normalizedParams
+        );
 
-      // Show success toast for search results
-      if (response.data.properties && response.data.properties.length > 0) {
+        // Log the raw response for debugging
+        console.log("=== SEARCH API RESPONSE ===");
+        console.log("Full response:", JSON.stringify(response.data, null, 2));
+        console.log(
+          "response.data.data:",
+          JSON.stringify(response.data.data, null, 2)
+        );
+        console.log(
+          "response.data.pagination:",
+          JSON.stringify(response.data.pagination, null, 2)
+        );
+        console.log("===========================");
+
+        // Map the backend response to the expected frontend format
+        const searchResult: SearchResult = {
+          properties: response.data.data || [],
+          total: response.data.pagination?.totalDocs || 0,
+          page: response.data.pagination?.page || 1,
+          limit: response.data.pagination?.limit || 20,
+          totalPages: response.data.pagination?.totalPages || 0,
+          filters: response.data.filters || {},
+        };
+
+        // Log the mapped result
+        console.log("=== MAPPED SEARCH RESULT ===");
+        console.log("searchResult:", JSON.stringify(searchResult, null, 2));
+        console.log("===========================");
+
+        setResults(searchResult);
+
+        // Show success toast for search results
+        if (searchResult.properties && searchResult.properties.length > 0) {
+          toast({
+            title: "Search Results",
+            description: `Found ${searchResult.properties.length} properties matching your criteria.`,
+            variant: "default",
+          });
+        } else {
+          toast({
+            title: "No Results",
+            description:
+              "No properties found matching your search criteria. Try adjusting your filters.",
+            variant: "default",
+          });
+        }
+      } catch (err: any) {
+        console.error("Search error:", err); // Debug log
+        const errorMessage =
+          err.response?.data?.message ||
+          err.message ||
+          "Failed to perform search. Please try again.";
+        setError(errorMessage);
         toast({
-          title: "Search Results",
-          description: `Found ${response.data.properties.length} properties matching your criteria.`,
-          variant: "default",
+          title: "Search Error",
+          description: errorMessage,
+          variant: "destructive",
         });
-      } else {
-        toast({
-          title: "No Results",
-          description:
-            "No properties found matching your search criteria. Try adjusting your filters.",
-          variant: "default",
-        });
+      } finally {
+        setIsLoading(false);
       }
-    } catch (err: any) {
-      console.error("Search error:", err); // Debug log
-      const errorMessage =
-        err.response?.data?.message ||
-        err.message ||
-        "Failed to perform search. Please try again.";
-      setError(errorMessage);
-      toast({
-        title: "Search Error",
-        description: errorMessage,
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  }, [debouncedQuery, filters, toast]);
+    },
+    [debouncedQuery, filters, toast]
+  );
 
   // Perform search when debounced query or filters change
   useEffect(() => {
@@ -179,13 +217,30 @@ export const useSearch = (initialFilters: SearchFilters = {}) => {
       };
 
       const response = await apiService.search.searchProperties(searchParams);
-      setResults((prev) => ({
-        ...response.data,
-        properties: [
-          ...(prev?.properties || []),
-          ...(response.data.properties || []),
-        ],
-      }));
+
+      // Map the backend response to the expected frontend format
+      const searchResult: SearchResult = {
+        properties: response.data.data || [],
+        total: response.data.pagination?.totalDocs || 0,
+        page: response.data.pagination?.page || 1,
+        limit: response.data.pagination?.limit || 20,
+        totalPages: response.data.pagination?.totalPages || 0,
+        filters: response.data.filters || {},
+      };
+
+      setResults(
+        (prev): SearchResult => ({
+          limit: searchResult.limit,
+          total: searchResult.total,
+          page: searchResult.page,
+          totalPages: searchResult.totalPages,
+          filters: searchResult.filters,
+          properties: [
+            ...(prev?.properties || []),
+            ...(searchResult.properties || []),
+          ],
+        })
+      );
     } catch (err: any) {
       const errorMessage =
         err.response?.data?.message || "Failed to load more results.";

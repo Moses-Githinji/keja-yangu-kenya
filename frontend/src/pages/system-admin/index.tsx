@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import AdminLayout from "@/components/admin/AdminLayout";
 import {
   Card,
@@ -18,8 +18,10 @@ import {
   Home,
   DollarSign,
   Bell,
+  RefreshCw,
 } from "lucide-react";
 import { Link } from "react-router-dom";
+import { apiService } from "@/services/api";
 
 const AdminOverview: React.FC = () => {
   return (
@@ -30,46 +32,91 @@ const AdminOverview: React.FC = () => {
 };
 
 const AdminOverviewContent: React.FC = () => {
-  const stats = [
+  const [stats, setStats] = useState({
+    properties: "0",
+    users: "0",
+    agents: "0",
+    revenue: "KES 0",
+    unreadMessages: "0",
+    systemHealth: "Online",
+  });
+  const [activities, setActivities] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchDashboardData = async () => {
+    try {
+      setLoading(true);
+      const [statsRes, activityRes] = await Promise.all([
+        apiService.admin.getStats(),
+        apiService.admin.getRecentActivity(),
+      ]);
+
+      if (statsRes.data.status === "success") {
+        const s = statsRes.data.data;
+        setStats({
+          properties: s.properties.toString(),
+          users: s.users.toString(),
+          agents: s.agents.toString(),
+          revenue: `KES ${(s.revenue / 1000).toFixed(1)}K`, // Simple formatting
+          unreadMessages: s.unreadMessages.toString(),
+          systemHealth: s.systemHealth,
+        });
+      }
+
+      if (activityRes.data.status === "success") {
+        setActivities(activityRes.data.data);
+      }
+    } catch (error) {
+      console.error("Failed to fetch admin dashboard data:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
+
+  const statsCards = [
     {
-      title: "Total Properties",
-      value: "1,234",
-      description: "Active listings",
+      title: "Properties",
+      value: stats.properties,
+      description: "Total listings",
       icon: Home,
       color: "text-blue-600",
     },
     {
       title: "Total Users",
-      value: "5,678",
+      value: stats.users,
       description: "Registered users",
       icon: Users,
       color: "text-green-600",
     },
     {
       title: "Active Agents",
-      value: "156",
+      value: stats.agents,
       description: "Verified agents",
       icon: Users,
       color: "text-purple-600",
     },
     {
       title: "Revenue",
-      value: "KES 2.4M",
-      description: "This month",
+      value: stats.revenue,
+      description: "Total collected",
       icon: DollarSign,
       color: "text-yellow-600",
     },
     {
       title: "Messages",
-      value: "89",
+      value: stats.unreadMessages,
       description: "Unread messages",
       icon: MessageSquare,
       color: "text-red-600",
     },
     {
-      title: "System Health",
-      value: "98.5%",
-      description: "Uptime this month",
+      title: "System Status",
+      value: stats.systemHealth,
+      description: "Live monitoring",
       icon: BarChart3,
       color: "text-green-600",
     },
@@ -120,20 +167,43 @@ const AdminOverviewContent: React.FC = () => {
     },
   ];
 
+  const formatDistanceToNow = (timestamp: string) => {
+    const now = new Date();
+    const then = new Date(timestamp);
+    const diffInSeconds = Math.floor((now.getTime() - then.getTime()) / 1000);
+
+    if (diffInSeconds < 60) return "Just now";
+    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
+    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
+    return then.toLocaleDateString();
+  };
+
   return (
     <div className="p-6">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">
-          System Administrator Dashboard
-        </h1>
-        <p className="text-gray-600 mt-2">
-          Manage users, agents, properties, and system settings
-        </p>
+      <div className="mb-8 flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">
+            System Administrator Dashboard
+          </h1>
+          <p className="text-gray-600 mt-2">
+            Manage users, agents, properties, and system settings
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          onClick={fetchDashboardData}
+          disabled={loading}
+        >
+          <RefreshCw
+            className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`}
+          />
+          Refresh
+        </Button>
       </div>
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6 mb-8">
-        {stats.map((stat, index) => (
+        {statsCards.map((stat, index) => (
           <Card key={index}>
             <CardHeader className="flex flex-row space-x-1 items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">
@@ -142,7 +212,9 @@ const AdminOverviewContent: React.FC = () => {
               <stat.icon className={`h-4 w-4 ${stat.color}`} />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stat.value}</div>
+              <div className="text-2xl font-bold">
+                {loading ? "..." : stat.value}
+              </div>
               <p className="text-xs text-muted-foreground">
                 {stat.description}
               </p>
@@ -210,8 +282,8 @@ const AdminOverviewContent: React.FC = () => {
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-sm">File Storage</span>
-                <span className="text-sm text-yellow-600 font-medium">
-                  Warning
+                <span className="text-sm text-green-600 font-medium">
+                  Healthy
                 </span>
               </div>
             </div>
@@ -227,38 +299,38 @@ const AdminOverviewContent: React.FC = () => {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              <div className="flex items-center space-x-4">
-                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium">
-                    Agent application approved
-                  </p>
-                  <p className="text-xs text-gray-600">2 hours ago</p>
+              {loading ? (
+                <div className="flex items-center justify-center py-8">
+                  <RefreshCw className="h-6 w-6 animate-spin text-gray-400" />
                 </div>
-              </div>
-              <div className="flex items-center space-x-4">
-                <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium">New user registration</p>
-                  <p className="text-xs text-gray-600">4 hours ago</p>
+              ) : activities.length > 0 ? (
+                activities.map((activity, idx) => (
+                  <div key={idx} className="flex items-center space-x-4">
+                    <div
+                      className={`w-2 h-2 rounded-full ${
+                        activity.type === "USER_REGISTRATION"
+                          ? "bg-blue-500"
+                          : activity.type === "PROPERTY_LISTED"
+                          ? "bg-green-500"
+                          : "bg-yellow-500"
+                      }`}
+                    ></div>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">{activity.title}</p>
+                      <p className="text-xs text-gray-600">
+                        {activity.description}
+                      </p>
+                      <p className="text-[10px] text-gray-400">
+                        {formatDistanceToNow(activity.timestamp)}
+                      </p>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-8 text-sm text-gray-500">
+                  No recent activity found.
                 </div>
-              </div>
-              <div className="flex items-center space-x-4">
-                <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium">
-                    Property listing moderated
-                  </p>
-                  <p className="text-xs text-gray-600">6 hours ago</p>
-                </div>
-              </div>
-              <div className="flex items-center space-x-4">
-                <div className="w-2 h-2 bg-red-500 rounded-full"></div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium">System backup completed</p>
-                  <p className="text-xs text-gray-600">8 hours ago</p>
-                </div>
-              </div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -275,45 +347,8 @@ const AdminOverviewContent: React.FC = () => {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              <div className="flex items-start space-x-3">
-                <div className="w-2 h-2 bg-red-500 rounded-full mt-2"></div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium">High CPU usage detected</p>
-                  <p className="text-xs text-gray-600">Server load: 95%</p>
-                  <p className="text-xs text-gray-500">5 min ago</p>
-                </div>
-              </div>
-              <div className="flex items-start space-x-3">
-                <div className="w-2 h-2 bg-yellow-500 rounded-full mt-2"></div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium">Database backup overdue</p>
-                  <p className="text-xs text-gray-600">Last backup: 48h ago</p>
-                  <p className="text-xs text-gray-500">2 hours ago</p>
-                </div>
-              </div>
-              <div className="flex items-start space-x-3">
-                <div className="w-2 h-2 bg-blue-500 rounded-full mt-2"></div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium">
-                    New agent applications pending
-                  </p>
-                  <p className="text-xs text-gray-600">
-                    3 applications waiting
-                  </p>
-                  <p className="text-xs text-gray-500">4 hours ago</p>
-                </div>
-              </div>
-              <div className="flex items-start space-x-3">
-                <div className="w-2 h-2 bg-green-500 rounded-full mt-2"></div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium">
-                    System maintenance completed
-                  </p>
-                  <p className="text-xs text-gray-600">
-                    All services operational
-                  </p>
-                  <p className="text-xs text-gray-500">6 hours ago</p>
-                </div>
+              <div className="flex items-start space-x-3 text-sm text-gray-500 italic">
+                No active critical alerts.
               </div>
             </div>
           </CardContent>

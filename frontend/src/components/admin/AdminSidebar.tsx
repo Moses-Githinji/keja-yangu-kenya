@@ -12,6 +12,7 @@ import {
   Settings,
   LogOut,
   MessageSquare,
+  Calendar,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -23,52 +24,75 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({ className }) => {
   const location = useLocation();
   const { user, logout } = useAuth();
 
-  const menuItems = [
+  const isAdmin = user?.role === "ADMIN";
+  const isAgent = user?.role === "AGENT";
+
+  // Define all possible menu items with role-aware paths and visibility
+  const allMenuItems = [
     {
       title: "Dashboard",
-      path: "/system-admin",
+      path: isAdmin ? "/system-admin" : isAgent ? "/agent" : "/host/dashboard",
       icon: LayoutDashboard,
+      visible: true, // Always visible to all roles
+    },
+    {
+      title: "Properties",
+      path: isAdmin ? "/system-admin/properties" : isAgent ? "/agent/properties" : "/host/properties",
+      icon: Home,
+      visible: true, // Visible to all roles
+    },
+    {
+      title: "Bookings",
+      path: "/host/bookings",
+      icon: Calendar,
+      visible: user?.role === 'HOST', // Only for HOST
+    },
+    {
+      title: "Earnings",
+      path: "/host/earnings",
+      icon: DollarSign,
+      visible: user?.role === 'HOST', // Only for HOST
     },
     {
       title: "User Management",
       path: "/system-admin/users",
       icon: Users,
-    },
-    ...(user?.role === "ADMIN"
-      ? [
-          {
-            title: "Agent Applications",
-            path: "/system-admin/agents",
-            icon: Users,
-          },
-        ]
-      : []),
-    {
-      title: "Property Oversight",
-      path: "/system-admin/properties",
-      icon: Home,
+      visible: isAdmin, // Only for ADMIN
     },
     {
-      title: "Financial Reports",
-      path: "/system-admin/finance",
+      title: isAdmin ? "Financial Reports" : "My Earnings",
+      path: isAdmin ? "/system-admin/finance" : "/agent/finance",
       icon: DollarSign,
+      visible: isAdmin || isAgent, // Show to both ADMIN and AGENT
     },
     {
       title: "System Health",
       path: "/system-admin/health",
       icon: BarChart3,
+      visible: isAdmin, // Only ADMIN
     },
     {
       title: "Messages",
-      path: "/system-admin/messages",
+      path: isAdmin ? "/system-admin/messages" : isAgent ? "/agent/messages" : "/host/messages",
       icon: MessageSquare,
+      visible: true, // All roles have messages
     },
     {
-      title: "System Settings",
-      path: "/system-admin/settings",
+      title: "Agent Applications",
+      path: "/system-admin/agents",
+      icon: Users,
+      visible: isAdmin, // Only ADMIN
+    },
+    {
+      title: isAdmin ? "System Settings" : "Account Settings",
+      path: isAdmin ? "/system-admin/settings" : isAgent ? "/agent/settings" : "/host/settings",
       icon: Settings,
+      visible: true, // All roles have settings
     },
   ];
+
+  // Filter only visible items for current user
+  const menuItems = allMenuItems.filter((item) => item.visible);
 
   const handleLogout = async () => {
     await logout();
@@ -78,15 +102,21 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({ className }) => {
     <div className={cn("flex flex-col h-full bg-white border-r", className)}>
       {/* Logo/Brand */}
       <div className="p-6 border-b">
-        <h2 className="text-xl font-bold text-gray-900">System Admin</h2>
-        <p className="text-sm text-gray-600">Administrator Dashboard</p>
+        <h2 className="text-xl font-bold text-gray-900">
+          {isAdmin ? "System Admin" : "Agent"}
+        </h2>
+        <p className="text-sm text-gray-600">
+          {isAdmin ? "Administrator Dashboard" : "Agent Dashboard"}
+        </p>
       </div>
 
       {/* Navigation Menu */}
-      <nav className="flex-1 p-4">
+      <nav className="flex-1 p-4 overflow-y-auto">
         <ul className="space-y-2">
           {menuItems.map((item) => {
             const isActive = location.pathname === item.path;
+            const Icon = item.icon;
+
             return (
               <li key={item.path}>
                 <Link to={item.path}>
@@ -97,7 +127,7 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({ className }) => {
                       isActive && "bg-blue-50 text-blue-700 hover:bg-blue-100"
                     )}
                   >
-                    <item.icon className="mr-3 h-4 w-4" />
+                    <Icon className="mr-3 h-4 w-4" />
                     {item.title}
                   </Button>
                 </Link>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { CheckCircle, AlertCircle, XCircle, Loader, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -23,22 +23,20 @@ const ToastNotification = ({
 }: ToastNotificationProps) => {
   const [isVisible, setIsVisible] = useState(false);
 
+  const handleClose = useCallback(() => {
+    setIsVisible(false);
+    const timer = setTimeout(() => onClose(id), 300);
+    return () => clearTimeout(timer);
+  }, [id, onClose]);
+
   useEffect(() => {
     setIsVisible(true);
     
     if (type !== "loading" && duration > 0) {
-      const timer = setTimeout(() => {
-        handleClose();
-      }, duration);
-
+      const timer = setTimeout(handleClose, duration);
       return () => clearTimeout(timer);
     }
-  }, [duration, type]);
-
-  const handleClose = () => {
-    setIsVisible(false);
-    setTimeout(() => onClose(id), 300);
-  };
+  }, [duration, type, handleClose]);
 
   const getIcon = () => {
     switch (type) {

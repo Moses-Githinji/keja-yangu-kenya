@@ -81,15 +81,22 @@ const SignIn = () => {
         setSuccess("Sign in successful! Redirecting...");
         // Redirect based on user role
         setTimeout(() => {
-          const userRole = result.data?.user?.role;
-          if (userRole === "ADMIN") {
-            navigate("/system-admin");
-          } else if (userRole === "AGENT") {
-            navigate("/agent/dashboard");
-          } else if (userRole === "CONTENT_CREATOR") {
-            navigate("/content-creator-dashboard");
-          } else {
-            navigate("/");
+          const userRole = result.data?.user?.role?.toUpperCase();
+          console.log("User role on login:", userRole);
+          
+          switch(userRole) {
+            case 'ADMIN':
+              navigate('/system-admin');
+              break;
+            case 'AGENT':
+              navigate('/agent');
+              break;
+            case 'HOST':
+              navigate('/host/dashboard');
+              break;
+            case 'USER':
+            default:
+              navigate('/');
           }
         }, 1500);
       } else {

@@ -4,6 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
+import apiService from "@/services/api";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -115,8 +116,31 @@ const Dashboard = () => {
       return;
     }
 
-    // TODO: Fetch user stats and recent activities from API
-    // For now, using mock data
+    const fetchDashboardData = async () => {
+      try {
+        // Fetch unread count for messages
+        const unreadRes = await apiService.notifications.getUnreadCount();
+        const unreadCount = unreadRes.data.success ? unreadRes.data.data.unreadCount : 0;
+
+        // Fetch favorites for saved properties
+        const favsRes = await apiService.properties.getFavorites();
+        const favsCount = favsRes.data.success ? favsRes.data.data.length : 0;
+
+        setStats({
+          propertiesViewed: 0, // TODO: Track views in backend
+          propertiesSaved: favsCount,
+          inquiriesSent: 0,    // TODO: Track inquiries in backend
+          messagesReceived: unreadCount,
+        });
+
+        // Set recent activities (could be fetched from a unified activity log)
+        setRecentActivities([]); // Clear mock activities for now
+      } catch (error) {
+        console.error("Error fetching dashboard data:", error);
+      }
+    };
+
+    fetchDashboardData();
   }, [isAuthenticated, navigate]);
 
   const getActivityIcon = (type: string) => {

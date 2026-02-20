@@ -1,27 +1,38 @@
 import { Heart, MapPin, Bed, Bath, Square, Star } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { useToast } from "@/components/ui/toast-container";
+import { useToast } from "@/components/ui/use-toast";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import PropertyModal from "./PropertyModal";
+import {
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+  CarouselNext,
+  CarouselPrevious,
+} from "@/components/ui/carousel";
 
 interface PropertyCardProps {
   id: string;
   title: string;
   location: string;
   price: string;
-  priceType: "sale" | "rent";
-  image: string;
+  rawPrice?: string;  // Added
+  priceType: "sale" | "rent" | "short_term";
+  images: string[];
+  primaryImage?: string;
   bedrooms: number;
   bathrooms: number;
   area: number;
+  areaUnit?: string;
   rating: number;
   isLuxury?: boolean;
   isFeatured?: boolean;
   isVerified?: boolean;
   isPaid?: boolean;
+  address?: string;  // Added
+  city?: string;     // Added
+  county?: string;   // Added
 }
 
 const PropertyCard = ({
@@ -30,10 +41,12 @@ const PropertyCard = ({
   location,
   price,
   priceType,
-  image,
+  images,
+  primaryImage,
   bedrooms,
   bathrooms,
   area,
+  areaUnit = "m²",
   rating,
   isLuxury = false,
   isFeatured = false,
@@ -41,154 +54,152 @@ const PropertyCard = ({
   isPaid = false,
 }: PropertyCardProps) => {
   const [isLiked, setIsLiked] = useState(false);
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const { toast } = useToast();
   const navigate = useNavigate();
-  const { showSuccess } = useToast();
 
-  const handleCardClick = () => {
-    navigate(`/property/${id}`);
+  const handleCardClick = (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest("button, a")) {
+      return;
+    } else {
+      navigate(`/property/${id}`);
+    }
   };
 
   const handleLikeClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    setIsLiked(!isLiked);
+    setIsLiked((prev) => !prev);
     if (!isLiked) {
-      showSuccess("Added to favorites", "Property saved to your wishlist");
+      toast({
+        title: "Added to favorites",
+        description: "Property saved to your wishlist",
+      });
     }
   };
 
-  const handleQuickViewClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setIsModalOpen(true);
-  };
-
-  const propertyData = {
-    id,
-    title,
-    location,
-    price,
-    priceType,
-    image,
-    bedrooms,
-    bathrooms,
-    area,
-    rating,
-    isLuxury,
-    isFeatured,
-    isVerified,
-    isPaid,
-  };
+  const displayImages =
+    images?.length > 0 ? images : [primaryImage || "/placeholder-property.jpg"];
 
   return (
-    <>
-      <Card
-        className="property-card group cursor-pointer animate-property-hover"
-        onClick={handleCardClick}
-      >
-        <div className="relative overflow-hidden">
-          {/* Property Image */}
-          <div className="aspect-[4/3] relative">
-            <img
-              src={image}
-              alt={title}
-              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-              loading="lazy"
-            />
-            <div className="property-overlay absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+    <Card
+      className="group overflow-hidden hover:shadow-xl transition-all duration-300 h-full flex flex-col cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+      onClick={handleCardClick}
+      tabIndex={0}
+      role="button"
+      aria-label={`View property details: ${title}`}
+      // onKeyDown={(e) => {
+      //   if ((e.key === "Enter" || e.key === " ") && onClick) {
+      //     e.preventDefault();
+      //     navigate(`/property/${id}`);
+      //   }
+      // }}
+    >
+      <div className="relative">
+        <Carousel className="w-full">
+          <CarouselContent>
+            {displayImages.map((imgUrl, index) => (
+              <CarouselItem key={index}>
+                <div className="aspect-[4/3] overflow-hidden bg-muted">
+                  <img
+                    src={imgUrl}
+                    alt={`${title} - Image ${index + 1}`}
+                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+                    loading="lazy"
+                  />
+                </div>
+              </CarouselItem>
+            ))}
+          </CarouselContent>
+
+          {displayImages.length > 1 && (
+            <>
+              <CarouselPrevious className="left-4 opacity-0 group-hover:opacity-70 transition-opacity duration-300" />
+              <CarouselNext className="right-4 opacity-0 group-hover:opacity-70 transition-opacity duration-300" />
+            </>
+          )}
+
+          {displayImages.length > 1 && (
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/70 text-white px-3 py-1 rounded-full text-xs font-medium backdrop-blur-sm">
+              {displayImages.length} photos
+            </div>
+          )}
+        </Carousel>
+
+        {/* Status Badges */}
+        <div className="absolute top-4 left-4 flex flex-col gap-2">
+          {isFeatured && <Badge variant="secondary">Featured</Badge>}
+          {isLuxury && (
+            <Badge className="bg-gradient-to-r from-amber-600 to-yellow-600 text-white">
+              Luxury
+            </Badge>
+          )}
+          {isVerified && (
+            <Badge className="bg-green-600 text-white">Verified</Badge>
+          )}
+          {isPaid && <Badge className="bg-blue-600 text-white">Premium</Badge>}
+        </div>
+
+        {/* Like Button */}
+        <button
+          type="button"
+          className="absolute top-4 right-4 bg-white/80 backdrop-blur-sm hover:bg-white text-gray-700 hover:text-red-500 transition-colors p-2 rounded-full"
+          onClick={handleLikeClick}
+          aria-label={isLiked ? "Remove from favorites" : "Add to favorites"}
+        >
+          <Heart
+            className={`h-5 w-5 ${isLiked ? "fill-red-500 text-red-500" : ""}`}
+          />
+        </button>
+      </div>
+
+      <CardContent className="p-5 flex flex-col flex-grow">
+        <div className="flex items-start justify-between mb-3">
+          <div className="text-2xl font-bold text-primary">
+            KSh {price}
+            {priceType === "rent" && (
+              <span className="text-base font-normal text-muted-foreground">
+                /mo
+              </span>
+            )}
+            {priceType === "short_term" && (
+              <span className="text-base font-normal text-muted-foreground">
+                /night
+              </span>
+            )}
           </div>
 
-          {/* Badges */}
-          <div className="absolute top-4 left-4 flex gap-2">
-            {isFeatured && (
-              <Badge className="bg-secondary text-secondary-foreground">
-                Featured
-              </Badge>
-            )}
-            {isLuxury && (
-              <Badge className="luxury-gradient text-luxury-foreground">
-                Luxury
-              </Badge>
-            )}
-            {isVerified && (
-              <Badge className="bg-green-500 text-green-50">Verified</Badge>
-            )}
-            {isPaid && <Badge className="bg-blue-500 text-blue-50">Paid</Badge>}
-          </div>
-
-          {/* Like Button */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className={`absolute top-4 right-4 bg-white/80 backdrop-blur-sm hover:bg-white ${
-              isLiked ? "text-red-500" : "text-gray-600"
-            }`}
-            onClick={handleLikeClick}
-          >
-            <Heart className={`h-5 w-5 ${isLiked ? "fill-current" : ""}`} />
-          </Button>
-
-          {/* Quick View Button */}
-          <div className="absolute inset-x-4 bottom-4 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-y-4 group-hover:translate-y-0">
-            <Button
-              className="w-full bg-white text-primary hover:bg-white/90"
-              onClick={handleQuickViewClick}
-            >
-              Quick View
-            </Button>
+          <div className="flex items-center gap-1 text-sm font-medium">
+            <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+            {rating.toFixed(1)}
           </div>
         </div>
 
-        <CardContent className="p-6">
-          {/* Price */}
-          <div className="flex items-center justify-between mb-3">
-            <div className="text-2xl font-bold text-primary">
-              KSh {price}
-              {priceType === "rent" && (
-                <span className="text-sm text-muted-foreground">/month</span>
-              )}
-            </div>
-            <div className="flex items-center gap-1">
-              <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-              <span className="text-sm font-medium">{rating}</span>
-            </div>
+        <h3 className="font-semibold text-lg line-clamp-2 mb-2 group-hover:text-primary transition-colors">
+          {title}
+        </h3>
+
+        <div className="flex items-center text-sm text-muted-foreground mb-4">
+          <MapPin className="h-3.5 w-3.5 mr-1 flex-shrink-0" />
+          <span className="line-clamp-1">{location}</span>
+        </div>
+
+        <div className="flex items-center justify-between text-sm text-muted-foreground mt-auto pt-3 border-t">
+          <div className="flex items-center gap-1.5">
+            <Bed className="h-4 w-4" />
+            <span>{bedrooms}</span>
           </div>
-
-          {/* Title */}
-          <h3 className="text-lg font-semibold text-card-foreground mb-2 line-clamp-1">
-            {title}
-          </h3>
-
-          {/* Location */}
-          <div className="flex items-center gap-1 text-muted-foreground mb-4">
-            <MapPin className="h-4 w-4" />
-            <span className="text-sm">{location}</span>
+          <div className="flex items-center gap-1.5">
+            <Bath className="h-4 w-4" />
+            <span>{bathrooms}</span>
           </div>
-
-          {/* Property Details */}
-          <div className="flex items-center justify-between text-sm text-muted-foreground">
-            <div className="flex items-center gap-1">
-              <Bed className="h-4 w-4" />
-              <span>{bedrooms} bed</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <Bath className="h-4 w-4" />
-              <span>{bathrooms} bath</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <Square className="h-4 w-4" />
-              <span>{area} m²</span>
-            </div>
+          <div className="flex items-center gap-1.5">
+            <Square className="h-4 w-4" />
+            <span>
+              {area} {areaUnit}
+            </span>
           </div>
-        </CardContent>
-      </Card>
-
-      {/* Property Modal */}
-      <PropertyModal
-        property={propertyData}
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-      />
-    </>
+        </div>
+      </CardContent>
+    </Card>
   );
 };
 
