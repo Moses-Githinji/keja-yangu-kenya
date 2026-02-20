@@ -19,13 +19,15 @@
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
-    "db:seed": "node prisma/seed-simple.js",
+    "db:seed": "tsx prisma/seed.ts",
     "db:reset": "prisma migrate reset",
-    "db:deploy": "prisma migrate deploy"
+    "db:deploy": "prisma migrate deploy",
+    "seed:admin": "node scripts/seedAdmin.js"
   },
   "dependencies": {
-    "@prisma/client": "^6.18.0",
+    "@prisma/client": "^5.22.0",
     "aws-sdk": "^2.1490.0",
+    "axios": "^1.13.5",
     "bcryptjs": "^2.4.3",
     "cloudinary": "^1.41.0",
     "compression": "^1.7.4",
@@ -40,7 +42,7 @@
     "google-auth-library": "^9.0.0",
     "helmet": "^7.1.0",
     "joi": "^17.11.0",
-    "jsonwebtoken": "^9.0.2",
+    "jsonwebtoken": "^9.0.3",
     "lodash": "^4.17.21",
     "moment": "^2.29.4",
     "morgan": "^1.10.0",
@@ -53,7 +55,9 @@
     "socket.io": "^4.7.4",
     "stripe": "^14.7.0",
     "twilio": "^4.19.0",
-    "uuid": "^9.0.1"
+    "uuid": "^9.0.1",
+    "winston": "^3.19.0",
+    "winston-daily-rotate-file": "^5.0.0"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
@@ -65,17 +69,20 @@
     "@types/lodash": "^4.14.202",
     "@types/morgan": "^1.9.9",
     "@types/multer": "^1.4.11",
-    "@types/node": "^20.9.0",
+    "@types/node": "^20.19.27",
     "@types/nodemailer": "^6.4.14",
     "@types/qrcode": "^1.5.5",
     "@types/uuid": "^9.0.7",
     "eslint": "^8.55.0",
     "jest": "^29.7.0",
+    "nock": "^14.0.10",
     "nodemon": "^3.0.2",
-    "prisma": "^6.18.0",
+    "prisma": "^5.22.0",
     "rimraf": "^5.0.5",
     "supertest": "^6.3.3",
-    "typescript": "^5.3.2"
+    "ts-node": "^10.9.2",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
   },
   "engines": {
     "node": ">=18.0.0",

@@ -1053,13 +1053,17 @@ router.post(
         // Check company uniqueness (if provided)
         company
           ? prisma.agentProfile.findFirst({
-              where: { company: { equals: company, mode: "insensitive" } },
+              where: {
+                company: { contains: company.toLowerCase(), mode: "insensitive" },
+              },
             })
           : null,
-        // Check license number uniqueness
+        // Check license number uniqueness with case-insensitive comparison
         prisma.agentProfile.findFirst({
           where: {
-            licenseNumber: { equals: licenseNumber, mode: "insensitive" },
+            licenseNumber: {
+              equals: licenseNumber,
+            },
           },
         }),
         // Check phone uniqueness

@@ -1,7 +1,18 @@
 import express from "express";
+import crypto from "crypto";
 import { body, param, validationResult } from "express-validator";
 import { authenticateToken } from "../middleware/auth.js";
 import { getPrismaClient } from "../config/database.js";
+import {
+  initiateStkPush,
+  handleMpesaCallback,
+} from "../services/paymentService.js";
+import {
+  paymentSecurityMiddleware,
+  stkPushSecurityMiddleware,
+  refundSecurityMiddleware,
+  logSecurityEvent,
+} from "../middleware/paymentSecurity.js";
 
 const router = express.Router();
 
@@ -14,7 +25,7 @@ const validatePayment = [
     .isIn(["KES", "USD"])
     .withMessage("Currency must be KES or USD"),
   body("paymentMethod")
-    .isIn(["STRIPE", "MPESA", "BANK_TRANSFER", "CASH"])
+    .isIn(["STRIPE", "MPESA", "BANK_TRANSFER", "CASH", "FLUTTERWAVE"])
     .withMessage("Invalid payment method"),
   body("description")
     .optional()
@@ -23,133 +34,293 @@ const validatePayment = [
     .withMessage("Description cannot exceed 500 characters"),
 ];
 
+// Validation for STK Push initiation
+const validateStkPush = [
+  body("amount")
+    .isFloat({ min: 0.01 })
+    .withMessage("Amount must be greater than 0"),
+  body("phoneNumber")
+    .isMobilePhone("any", { strictMode: false })
+    .withMessage("Valid phone number is required"),
+  body("propertyId")
+    .optional()
+    .isString()
+    .withMessage("Property ID must be a string"),
+  body("propertyDetails")
+    .optional()
+    .isObject()
+    .withMessage("Property details must be an object"),
+];
+
 // Helper to clear payment cache
 const clearPaymentCache = async (paymentId = null) => {
   try {
-    const redisClient = getRedisClient();
-    await redisClient.del("user_payments");
-    if (paymentId) {
-      await redisClient.del(`payment:${paymentId}`);
-    }
-    console.log("Payment cache cleared.");
+    // Redis caching is optional - skip if not available
+    console.log("Payment cache clearing skipped (Redis not configured).");
   } catch (error) {
     console.warn("Failed to clear payment cache:", error.message);
   }
 };
 
-// @route   POST /api/v1/payments
-// @desc    Create a new payment
+// @route   POST /api/v1/payments/initiate-stk-push
+// @desc    Initiate M-Pesa STK Push payment
 // @access  Private
-router.post("/", authenticateToken, validatePayment, async (req, res, next) => {
-  try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({
-        status: "error",
-        message: "Validation failed",
-        errors: errors.array(),
-      });
-    }
-
-    const { amount, currency, paymentMethod, description } = req.body;
-    const prisma = getPrismaClient();
-
-    // Generate transaction ID
-    const transactionId = `TXN_${Date.now()}_${Math.random()
-      .toString(36)
-      .substr(2, 9)
-      .toUpperCase()}`;
-
-    // Create payment record
-    const payment = await prisma.payment.create({
-      data: {
-        amount,
-        currency,
-        paymentMethod,
-        description,
-        transactionId,
-        userId: req.user.id,
-        status: "PENDING",
-      },
-      include: {
-        user: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            email: true,
-          },
-        },
-      },
-    });
-
-    // Process payment based on method
-    let paymentResult;
+router.post(
+  "/initiate-stk-push",
+  authenticateToken,
+  stkPushSecurityMiddleware,
+  validateStkPush,
+  async (req, res, next) => {
     try {
-      switch (paymentMethod) {
-        case "STRIPE":
-          paymentResult = await processStripePayment(payment);
-          break;
-        case "MPESA":
-          paymentResult = await processMpesaPayment(payment);
-          break;
-        case "BANK_TRANSFER":
-          paymentResult = await processBankTransfer(payment);
-          break;
-        case "CASH":
-          paymentResult = await processCashPayment(payment);
-          break;
-        default:
-          throw new Error("Unsupported payment method");
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({
+          status: "error",
+          message: "Validation failed",
+          errors: errors.array(),
+        });
       }
 
-      // Update payment status
-      await prisma.payment.update({
-        where: { id: payment.id },
-        data: {
-          status: paymentResult.success ? "COMPLETED" : "FAILED",
-          transactionId: paymentResult.transactionId || payment.transactionId,
-        },
+      const { amount, phoneNumber, propertyId, propertyDetails } = req.body;
+      const userId = req.user.id;
+
+      const result = await initiateStkPush({
+        userId,
+        propertyId,
+        amount,
+        phoneNumber,
+        propertyDetails,
       });
 
-      await clearPaymentCache(payment.id);
+      if (result.success) {
+        // Log successful STK push initiation
+        await logSecurityEvent({
+          type: "STK_PUSH_INITIATED",
+          userId: req.user.id,
+          ipAddress: req.ip,
+          userAgent: req.get("User-Agent"),
+          endpoint: req.path,
+          method: req.method,
+          details: {
+            paymentId: result.paymentId,
+            amount,
+            phoneNumber,
+            checkoutRequestId: result.checkoutRequestId,
+          },
+        });
 
-      if (paymentResult.success) {
         res.status(200).json({
           status: "success",
-          message: "Payment processed successfully",
+          message: "STK Push initiated successfully",
           data: {
-            ...payment,
-            status: "COMPLETED",
-            transactionId: paymentResult.transactionId || payment.transactionId,
+            paymentId: result.paymentId,
+            checkoutRequestId: result.checkoutRequestId,
+            customerMessage: result.customerMessage,
           },
         });
       } else {
-        res.status(400).json({
-          status: "error",
-          message: "Payment failed",
-          data: {
-            ...payment,
-            status: "FAILED",
-            error: paymentResult.error,
+        // Log failed STK push
+        await logSecurityEvent({
+          type: "STK_PUSH_FAILED",
+          userId: req.user.id,
+          ipAddress: req.ip,
+          userAgent: req.get("User-Agent"),
+          endpoint: req.path,
+          method: req.method,
+          details: {
+            amount,
+            phoneNumber,
+            error: result.error,
           },
         });
+
+        res.status(400).json({
+          status: "error",
+          message: "Failed to initiate STK Push",
+          error: result.error,
+        });
       }
-    } catch (paymentError) {
-      // Update payment status to failed
-      await prisma.payment.update({
-        where: { id: payment.id },
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// @route   POST /api/v1/payments
+// @desc    Create a new payment
+// @access  Private
+router.post(
+  "/",
+  authenticateToken,
+  paymentSecurityMiddleware,
+  validatePayment,
+  async (req, res, next) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({
+          status: "error",
+          message: "Validation failed",
+          errors: errors.array(),
+        });
+      }
+
+      const { amount, currency, paymentMethod, description } = req.body;
+      const prisma = getPrismaClient();
+
+      // Generate transaction ID
+      const transactionId = `TXN_${Date.now()}_${Math.random()
+        .toString(36)
+        .substr(2, 9)
+        .toUpperCase()}`;
+
+      // Create payment record
+      const payment = await prisma.payment.create({
         data: {
-          status: "FAILED",
+          amount,
+          currency,
+          paymentMethod,
+          description,
+          transactionId,
+          userId: req.user.id,
+          status: "PENDING",
+        },
+        include: {
+          user: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              email: true,
+            },
+          },
         },
       });
 
-      throw paymentError;
+      // Log payment creation
+      await logSecurityEvent({
+        type: "PAYMENT_CREATED",
+        userId: req.user.id,
+        ipAddress: req.ip,
+        userAgent: req.get("User-Agent"),
+        endpoint: req.path,
+        method: req.method,
+        details: {
+          paymentId: payment.id,
+          amount,
+          currency,
+          paymentMethod,
+          transactionId,
+        },
+      });
+
+      // Process payment based on method
+      let paymentResult;
+      try {
+        switch (paymentMethod) {
+          case "STRIPE":
+            paymentResult = await processStripePayment(payment);
+            break;
+          case "MPESA":
+            paymentResult = await processMpesaPayment(payment);
+            break;
+          case "FLUTTERWAVE":
+            paymentResult = await processFlutterwavePayment(payment);
+            break;
+          case "BANK_TRANSFER":
+            paymentResult = await processBankTransfer(payment);
+            break;
+          case "CASH":
+            paymentResult = await processCashPayment(payment);
+            break;
+          default:
+            throw new Error("Unsupported payment method");
+        }
+
+        // Update payment status
+        await prisma.payment.update({
+          where: { id: payment.id },
+          data: {
+            status: paymentResult.success ? "COMPLETED" : "FAILED",
+            transactionId: paymentResult.transactionId || payment.transactionId,
+          },
+        });
+
+        await clearPaymentCache(payment.id);
+
+        if (paymentResult.success) {
+          // Log successful payment
+          await logSecurityEvent({
+            type: "PAYMENT_SUCCESSFUL",
+            userId: req.user.id,
+            ipAddress: req.ip,
+            userAgent: req.get("User-Agent"),
+            endpoint: req.path,
+            method: req.method,
+            details: {
+              paymentId: payment.id,
+              amount,
+              currency,
+              paymentMethod,
+              transactionId:
+                paymentResult.transactionId || payment.transactionId,
+            },
+          });
+
+          res.status(200).json({
+            status: "success",
+            message: "Payment processed successfully",
+            data: {
+              ...payment,
+              status: "COMPLETED",
+              transactionId:
+                paymentResult.transactionId || payment.transactionId,
+            },
+          });
+        } else {
+          // Log failed payment
+          await logSecurityEvent({
+            type: "PAYMENT_FAILED",
+            userId: req.user.id,
+            ipAddress: req.ip,
+            userAgent: req.get("User-Agent"),
+            endpoint: req.path,
+            method: req.method,
+            details: {
+              paymentId: payment.id,
+              amount,
+              currency,
+              paymentMethod,
+              error: paymentResult.error,
+            },
+          });
+
+          res.status(400).json({
+            status: "error",
+            message: "Payment failed",
+            data: {
+              ...payment,
+              status: "FAILED",
+              error: paymentResult.error,
+            },
+          });
+        }
+      } catch (paymentError) {
+        // Update payment status to failed
+        await prisma.payment.update({
+          where: { id: payment.id },
+          data: {
+            status: "FAILED",
+          },
+        });
+
+        throw paymentError;
+      }
+    } catch (error) {
+      next(error);
     }
-  } catch (error) {
-    next(error);
   }
-});
+);
 
 // @route   GET /api/v1/payments
 // @desc    Get user's payment history
@@ -252,6 +423,7 @@ router.get("/:id", authenticateToken, async (req, res, next) => {
 router.post(
   "/:id/refund",
   authenticateToken,
+  refundSecurityMiddleware,
   [
     body("reason")
       .trim()
@@ -326,6 +498,22 @@ router.post(
 
           await clearPaymentCache(id);
 
+          // Log successful refund
+          await logSecurityEvent({
+            type: "REFUND_SUCCESSFUL",
+            userId: req.user.id,
+            ipAddress: req.ip,
+            userAgent: req.get("User-Agent"),
+            endpoint: req.path,
+            method: req.method,
+            details: {
+              paymentId: id,
+              refundAmount: payment.amount,
+              refundTransactionId: refundResult.transactionId,
+              reason,
+            },
+          });
+
           res.status(200).json({
             status: "success",
             message: "Refund processed successfully",
@@ -336,6 +524,22 @@ router.post(
             },
           });
         } else {
+          // Log failed refund
+          await logSecurityEvent({
+            type: "REFUND_FAILED",
+            userId: req.user.id,
+            ipAddress: req.ip,
+            userAgent: req.get("User-Agent"),
+            endpoint: req.path,
+            method: req.method,
+            details: {
+              paymentId: id,
+              refundAmount: payment.amount,
+              reason,
+              error: refundResult.error,
+            },
+          });
+
           res.status(400).json({
             status: "error",
             message: "Refund failed",
@@ -397,6 +601,55 @@ router.get("/stats/overview", authenticateToken, async (req, res, next) => {
   }
 });
 
+// @route   POST /api/v1/payments/verify-flutterwave
+// @desc    Verify Flutterwave payment
+// @access  Private
+router.post(
+  "/verify-flutterwave",
+  authenticateToken,
+  paymentSecurityMiddleware,
+  async (req, res, next) => {
+    try {
+      const { transaction_id, tx_ref } = req.body;
+      const prisma = getPrismaClient();
+
+      // Find payment by tx_ref
+      const payment = await prisma.payment.findFirst({
+        where: { transactionId: tx_ref, userId: req.user.id },
+      });
+
+      if (!payment) {
+        return res
+          .status(404)
+          .json({ status: "error", message: "Payment not found" });
+      }
+
+      // Verify with Flutterwave API (placeholder - implement actual verification)
+      // For now, assume success if transaction_id is provided
+      if (transaction_id) {
+        await prisma.payment.update({
+          where: { id: payment.id },
+          data: { status: "COMPLETED" },
+        });
+
+        await clearPaymentCache(payment.id);
+
+        res.status(200).json({
+          status: "success",
+          message: "Payment verified successfully",
+          data: { paymentId: payment.id },
+        });
+      } else {
+        res
+          .status(400)
+          .json({ status: "error", message: "Invalid transaction data" });
+      }
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
 // Payment processing functions (implementations would depend on specific payment providers)
 async function processStripePayment(payment) {
   // Implement Stripe payment processing
@@ -408,6 +661,12 @@ async function processMpesaPayment(payment) {
   // Implement M-Pesa payment processing
   // This is a placeholder - actual implementation would use M-Pesa API
   return { success: true, transactionId: `MPESA_${Date.now()}` };
+}
+
+async function processFlutterwavePayment(payment) {
+  // For Flutterwave, payment is initiated from frontend popup
+  // Verification happens via callback
+  return { success: true, transactionId: payment.transactionId };
 }
 
 async function processBankTransfer(payment) {
@@ -428,6 +687,11 @@ async function processStripeRefund(payment) {
 async function processMpesaRefund(payment) {
   // Implement M-Pesa refund processing
   return { success: true, transactionId: `REFUND_MPESA_${Date.now()}` };
+}
+
+async function processFlutterwaveRefund(payment) {
+  // Implement Flutterwave refund processing
+  return { success: true, transactionId: `REFUND_FLUTTERWAVE_${Date.now()}` };
 }
 
 async function processBankTransferRefund(payment) {

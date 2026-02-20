@@ -139,6 +139,17 @@ services:
       - "--path.sysfs=/host/sys"
       - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
 
+  nginx-exporter:
+    image: nginx/nginx-prometheus-exporter:latest
+    container_name: kejayangu-nginx-exporter
+    restart: unless-stopped
+    ports:
+      - "9113:9113"
+    networks:
+      - kejayangu-network
+    command:
+      - "--nginx.scrape-uri=http://host.docker.internal:8080/stub_status"
+
 volumes:
   postgres_data:
   prometheus_data:

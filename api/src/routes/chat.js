@@ -1,200 +1,31 @@
 import express from "express";
-import { body, param, validationResult } from "express-validator";
+import { body, query, validationResult } from "express-validator";
 import { authenticateToken } from "../middleware/auth.js";
 import { getPrismaClient } from "../config/database.js";
 
 const router = express.Router();
 
-// Validation for chat messages
+// Validation for sending a message
 const validateMessage = [
   body("content")
     .trim()
-    .isLength({ min: 1, max: 1000 })
-    .withMessage("Message content must be between 1 and 1000 characters"),
-  body("conversationId").isString().withMessage("Conversation ID is required"),
+    .isLength({ min: 1, max: 2000 })
+    .withMessage("Message content must be between 1 and 2000 characters"),
 ];
 
-// Helper to clear chat cache
-const clearChatCache = async (conversationId = null) => {
-  try {
-    const redisClient = getRedisClient();
-    if (conversationId) {
-      await redisClient.del(`conversation:${conversationId}`);
-      await redisClient.del(`conversation_messages:${conversationId}`);
-    }
-    console.log("Chat cache cleared.");
-  } catch (error) {
-    console.warn("Failed to clear chat cache:", error.message);
-  }
-};
+// Validation for starting a chat
+const validateStartChat = [
+  body("agentId").isString().withMessage("Agent ID is required"),
+  body("propertyId").optional().isString(),
+];
 
-// @route   GET /api/v1/chat/conversations
-// @desc    Get user's conversations
-// @access  Private
-router.get("/conversations", authenticateToken, async (req, res, next) => {
-  try {
-    const { page = 1, limit = 10 } = req.query;
-    const prisma = getPrismaClient();
-
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-
-    const [conversations, totalCount] = await Promise.all([
-      prisma.conversation.findMany({
-        where: { userId: req.user.id },
-        skip,
-        take: parseInt(limit),
-        orderBy: { lastMessageAt: "desc" },
-        include: {
-          property: {
-            select: {
-              id: true,
-              title: true,
-              images: {
-                where: { isPrimary: true },
-                select: { url: true },
-              },
-            },
-          },
-          messages: {
-            orderBy: { createdAt: "desc" },
-            take: 1,
-            select: {
-              content: true,
-              createdAt: true,
-              sender: {
-                select: {
-                  id: true,
-                  firstName: true,
-                  lastName: true,
-                },
-              },
-            },
-          },
-        },
-      }),
-      prisma.conversation.count({ where: { userId: req.user.id } }),
-    ]);
-
-    const totalPages = Math.ceil(totalCount / parseInt(limit));
-
-    res.status(200).json({
-      status: "success",
-      data: conversations,
-      pagination: {
-        totalDocs: totalCount,
-        limit: parseInt(limit),
-        totalPages,
-        page: parseInt(page),
-        hasPrevPage: parseInt(page) > 1,
-        hasNextPage: parseInt(page) < totalPages,
-        prevPage: parseInt(page) > 1 ? parseInt(page) - 1 : null,
-        nextPage: parseInt(page) < totalPages ? parseInt(page) + 1 : null,
-      },
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-// @route   GET /api/v1/chat/conversations/:id
-// @desc    Get conversation by ID with messages
-// @access  Private
-router.get("/conversations/:id", authenticateToken, async (req, res, next) => {
-  try {
-    const { id } = req.params;
-    const { page = 1, limit = 50 } = req.query;
-    const prisma = getPrismaClient();
-
-    // Check if user is part of this conversation
-    const conversation = await prisma.conversation.findFirst({
-      where: {
-        id,
-        OR: [
-          { userId: req.user.id },
-          { property: { ownerId: req.user.id } },
-          { property: { agentId: req.user.id } },
-        ],
-      },
-      include: {
-        property: {
-          select: {
-            id: true,
-            title: true,
-            images: {
-              where: { isPrimary: true },
-              select: { url: true },
-            },
-          },
-        },
-      },
-    });
-
-    if (!conversation) {
-      return res
-        .status(404)
-        .json({ status: "error", message: "Conversation not found" });
-    }
-
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-
-    const [messages, totalCount] = await Promise.all([
-      prisma.message.findMany({
-        where: { conversationId: id },
-        skip,
-        take: parseInt(limit),
-        orderBy: { createdAt: "desc" },
-        include: {
-          sender: {
-            select: {
-              id: true,
-              firstName: true,
-              lastName: true,
-              avatar: true,
-            },
-          },
-        },
-      }),
-      prisma.message.count({ where: { conversationId: id } }),
-    ]);
-
-    const totalPages = Math.ceil(totalCount / parseInt(limit));
-
-    res.status(200).json({
-      status: "success",
-      data: {
-        conversation,
-        messages: messages.reverse(), // Reverse to show oldest first
-        pagination: {
-          totalDocs: totalCount,
-          limit: parseInt(limit),
-          totalPages,
-          page: parseInt(page),
-          hasPrevPage: parseInt(page) > 1,
-          hasNextPage: parseInt(page) < totalPages,
-          prevPage: parseInt(page) > 1 ? parseInt(page) - 1 : null,
-          nextPage: parseInt(page) < totalPages ? parseInt(page) + 1 : null,
-        },
-      },
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-// @route   POST /api/v1/chat/conversations
-// @desc    Create a new conversation
+// @route   POST /api/v1/chat
+// @desc    Create or retrieve an existing chat conversation
 // @access  Private
 router.post(
-  "/conversations",
+  "/",
   authenticateToken,
-  [
-    body("propertyId").isString().withMessage("Property ID is required"),
-    body("title")
-      .optional()
-      .trim()
-      .isLength({ max: 200 })
-      .withMessage("Title cannot exceed 200 characters"),
-  ],
+  validateStartChat,
   async (req, res, next) => {
     try {
       const errors = validationResult(req);
@@ -206,43 +37,46 @@ router.post(
         });
       }
 
-      const { propertyId, title } = req.body;
+      const { agentId, propertyId } = req.body;
+      const userId = req.user.id;
       const prisma = getPrismaClient();
 
-      // Check if property exists
-      const property = await prisma.property.findUnique({
-        where: { id: propertyId },
-      });
-
-      if (!property) {
-        return res
-          .status(404)
-          .json({ status: "error", message: "Property not found" });
-      }
-
-      // Check if conversation already exists
-      const existingConversation = await prisma.conversation.findFirst({
-        where: {
-          userId: req.user.id,
-          propertyId,
-        },
-      });
-
-      if (existingConversation) {
+      // Ensure user is not chatting with themselves
+      if (userId === agentId) {
         return res.status(400).json({
           status: "error",
-          message: "Conversation already exists for this property",
+          message: "You cannot start a chat with yourself",
         });
       }
 
-      // Create conversation
-      const conversation = await prisma.conversation.create({
-        data: {
-          title: title || `Inquiry about ${property.title}`,
-          userId: req.user.id,
-          propertyId,
+      // Check if chat already exists
+      let chat = await prisma.chat.findFirst({
+        where: {
+            userId,
+            agentId,
+            propertyId: propertyId || null, 
         },
         include: {
+          agent: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              avatar: true,
+              isOnline: true,
+              lastSeen: true,
+            },
+          },
+          user: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              avatar: true,
+              isOnline: true,
+              lastSeen: true,
+            },
+          },
           property: {
             select: {
               id: true,
@@ -250,16 +84,81 @@ router.post(
               images: {
                 where: { isPrimary: true },
                 select: { url: true },
+                take: 1,
               },
             },
           },
         },
       });
 
+      if (chat) {
+        return res.status(200).json({
+          status: "success",
+          data: chat,
+        });
+      }
+
+      // Create new chat
+      // Note: We need to verify that 'agentId' corresponds to a valid user, 
+      // but the foreign key constraint will handle that (throwing an error if invalid).
+      // Same for propertyId.
+      
+      try {
+        chat = await prisma.chat.create({
+            data: {
+              userId,
+              agentId,
+              propertyId: propertyId || null,
+            },
+            include: {
+              agent: {
+                select: {
+                  id: true,
+                  firstName: true,
+                  lastName: true,
+                  avatar: true,
+                  isOnline: true,
+                  lastSeen: true,
+                },
+              },
+              user: {
+                select: {
+                  id: true,
+                  firstName: true,
+                  lastName: true,
+                  avatar: true,
+                  isOnline: true,
+                  lastSeen: true,
+                },
+              },
+              property: {
+                select: {
+                  id: true,
+                  title: true,
+                  images: {
+                    where: { isPrimary: true },
+                    select: { url: true },
+                    take: 1,
+                  },
+                },
+              },
+            },
+          });
+      } catch (dbError) {
+          // Check for foreign key constraint failures (e.g. invalid agentId or propertyId)
+          if (dbError.code === 'P2003') {
+               return res.status(400).json({
+                  status: "error",
+                  message: "Invalid agentId or propertyId provided.",
+              });
+          }
+          throw dbError;
+      }
+
       res.status(201).json({
         status: "success",
-        message: "Conversation created successfully",
-        data: conversation,
+        message: "Chat created successfully",
+        data: chat,
       });
     } catch (error) {
       next(error);
@@ -267,11 +166,142 @@ router.post(
   }
 );
 
-// @route   POST /api/v1/chat/messages
-// @desc    Send a message in a conversation
+// @route   GET /api/v1/chat
+// @desc    List user's conversations
+// @access  Private
+router.get("/", authenticateToken, async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const prisma = getPrismaClient();
+
+    const chats = await prisma.chat.findMany({
+      where: {
+        OR: [{ userId: userId }, { agentId: userId }],
+      },
+      include: {
+        agent: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            avatar: true,
+            isOnline: true,
+            lastSeen: true,
+          },
+        },
+        user: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            avatar: true,
+            isOnline: true,
+            lastSeen: true,
+          },
+        },
+        property: {
+          select: {
+            id: true,
+            title: true,
+            images: {
+                where: { isPrimary: true },
+                select: { url: true },
+                take: 1
+            }
+          },
+        },
+        messages: {
+          orderBy: { createdAt: "desc" },
+          take: 1,
+        },
+      },
+      orderBy: { updatedAt: "desc" },
+    });
+
+    res.status(200).json({
+      status: "success",
+      results: chats.length,
+      data: chats,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// @route   GET /api/v1/chat/:id/messages
+// @desc    Get message history for a chat
+// @access  Private
+router.get("/:id/messages", authenticateToken, async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { page = 1, limit = 50 } = req.query;
+    const prisma = getPrismaClient();
+
+    // Verify user is participant
+    const chat = await prisma.chat.findUnique({
+      where: { id },
+      select: { userId: true, agentId: true },
+    });
+
+    if (!chat) {
+        return res.status(404).json({ status: "error", message: "Chat not found" });
+    }
+
+    if (chat.userId !== req.user.id && chat.agentId !== req.user.id) {
+      return res.status(403).json({
+        status: "error",
+        message: "You are not creating authorized to view this chat",
+      });
+    }
+
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    const [messages, totalCount] = await Promise.all([
+      prisma.message.findMany({
+        where: { chatId: id },
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: parseInt(limit),
+        include: {
+            sender: {
+                select: {
+                    id: true,
+                    firstName: true,
+                    lastName: true,
+                    avatar: true
+                }
+            }
+        }
+      }),
+      prisma.message.count({ where: { chatId: id } }),
+    ]);
+
+    const totalPages = Math.ceil(totalCount / parseInt(limit));
+
+    res.status(200).json({
+      status: "success",
+      data: {
+        messages: messages.reverse(), // Return oldest first for UI
+        pagination: {
+          totalDocs: totalCount,
+          limit: parseInt(limit),
+          totalPages,
+          page: parseInt(page),
+          hasPrevPage: parseInt(page) > 1,
+          hasNextPage: parseInt(page) < totalPages,
+        },
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// @route   POST /api/v1/chat/:id/messages
+// @desc    Send a message
 // @access  Private
 router.post(
-  "/messages",
+  "/:id/messages",
   authenticateToken,
   validateMessage,
   async (req, res, next) => {
@@ -279,73 +309,69 @@ router.post(
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
         return res.status(400).json({
-          status: "error",
-          message: "Validation failed",
-          errors: errors.array(),
+            status: "error",
+             message: "Validation failed", 
+             errors: errors.array() 
         });
       }
 
-      const { content, conversationId } = req.body;
+      const { id } = req.params;
+      const { content } = req.body;
+      const userId = req.user.id;
       const prisma = getPrismaClient();
 
-      // Check if conversation exists and user is part of it
-      const conversation = await prisma.conversation.findFirst({
-        where: {
-          id: conversationId,
-          OR: [
-            { userId: req.user.id },
-            { property: { ownerId: req.user.id } },
-            { property: { agentId: req.user.id } },
-          ],
-        },
+      // Verify user is participant
+      const chat = await prisma.chat.findUnique({
+        where: { id },
       });
 
-      if (!conversation) {
-        return res
-          .status(404)
-          .json({ status: "error", message: "Conversation not found" });
+      if (!chat) {
+        return res.status(404).json({ status: "error", message: "Chat not found" });
+      }
+
+      if (chat.userId !== userId && chat.agentId !== userId) {
+        return res.status(403).json({
+          status: "error",
+          message: "You are not authorized to send messages to this chat",
+        });
       }
 
       // Create message
       const message = await prisma.message.create({
         data: {
+          chatId: id,
+          senderId: userId,
           content,
-          conversationId,
-          senderId: req.user.id,
         },
         include: {
-          sender: {
-            select: {
-              id: true,
-              firstName: true,
-              lastName: true,
-              avatar: true,
-            },
-          },
-        },
+            sender: {
+                select: {
+                    id: true,
+                    firstName: true,
+                     lastName: true,
+                     avatar: true
+                }
+            }
+        }
       });
 
-      // Update conversation last message time
-      await prisma.conversation.update({
-        where: { id: conversationId },
-        data: { lastMessageAt: new Date() },
+      // Update chat's updatedAt timestamp
+      await prisma.chat.update({
+        where: { id },
+        data: { updatedAt: new Date() },
       });
 
-      // Clear cache
-      await clearChatCache(conversationId);
-
-      // Emit to Socket.IO if available
+      // Emit socket event
       const io = req.app.get("io");
       if (io) {
-        io.to(`conversation-${conversationId}`).emit("new-message", {
+        io.to(`conversation-${id}`).emit("new-message", {
           message,
-          conversationId,
+          chatId: id,
         });
       }
 
       res.status(201).json({
         status: "success",
-        message: "Message sent successfully",
         data: message,
       });
     } catch (error) {
@@ -354,124 +380,161 @@ router.post(
   }
 );
 
-// @route   PUT /api/v1/chat/messages/:id/read
-// @desc    Mark message as read
-// @access  Private
-router.put("/messages/:id/read", authenticateToken, async (req, res, next) => {
-  try {
-    const { id } = req.params;
-    const prisma = getPrismaClient();
-
-    // Check if message exists and user is part of the conversation
-    const message = await prisma.message.findFirst({
-      where: {
-        id,
-        conversation: {
-          OR: [
-            { userId: req.user.id },
-            { property: { ownerId: req.user.id } },
-            { property: { agentId: req.user.id } },
-          ],
-        },
-      },
-      include: {
-        conversation: true,
-      },
-    });
-
-    if (!message) {
-      return res
-        .status(404)
-        .json({ status: "error", message: "Message not found" });
-    }
-
-    // Mark message as read
-    await prisma.message.update({
-      where: { id },
-      data: { isRead: true },
-    });
-
-    await clearChatCache(message.conversation.id);
-
-    res.status(200).json({
-      status: "success",
-      message: "Message marked as read",
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
 // @route   GET /api/v1/chat/unread-count
-// @desc    Get unread message count for user
+// @desc    Get total unread message count for the user
 // @access  Private
 router.get("/unread-count", authenticateToken, async (req, res, next) => {
   try {
+    const userId = req.user.id;
     const prisma = getPrismaClient();
 
-    const unreadCount = await prisma.message.count({
+    const count = await prisma.message.count({
       where: {
-        conversation: {
-          OR: [
-            { userId: req.user.id },
-            { property: { ownerId: req.user.id } },
-            { property: { agentId: req.user.id } },
-          ],
+        chat: {
+          OR: [{ userId: userId }, { agentId: userId }],
         },
-        senderId: { not: req.user.id },
+        senderId: { not: userId },
         isRead: false,
       },
     });
 
     res.status(200).json({
       status: "success",
-      data: { unreadCount },
+      data: { unreadCount: count },
     });
   } catch (error) {
     next(error);
   }
 });
 
-// @route   DELETE /api/v1/chat/conversations/:id
+// @route   PUT /api/v1/chat/:id/read-all
+// @desc    Mark all messages in a conversation as read
+// @access  Private
+router.put("/:id/read-all", authenticateToken, async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id;
+    const prisma = getPrismaClient();
+
+    // Verify participant
+    const chat = await prisma.chat.findUnique({
+      where: { id },
+      select: { userId: true, agentId: true },
+    });
+
+    if (!chat) {
+      return res.status(404).json({ status: "error", message: "Chat not found" });
+    }
+
+    if (chat.userId !== userId && chat.agentId !== userId) {
+      return res.status(403).json({
+        status: "error",
+        message: "You are not authorized to access this chat",
+      });
+    }
+
+    await prisma.message.updateMany({
+      where: {
+        chatId: id,
+        senderId: { not: userId },
+        isRead: false,
+      },
+      data: { isRead: true },
+    });
+
+    res.status(200).json({
+      status: "success",
+      message: "All messages marked as read",
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// @route   DELETE /api/v1/chat/:id
 // @desc    Delete a conversation
 // @access  Private
-router.delete(
-  "/conversations/:id",
-  authenticateToken,
-  async (req, res, next) => {
-    try {
-      const { id } = req.params;
-      const prisma = getPrismaClient();
+router.delete("/:id", authenticateToken, async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id;
+    const prisma = getPrismaClient();
 
-      // Check if conversation exists and user is part of it
-      const conversation = await prisma.conversation.findFirst({
-        where: {
-          id,
-          userId: req.user.id,
-        },
-      });
+    const chat = await prisma.chat.findUnique({
+      where: { id },
+      select: { userId: true, agentId: true },
+    });
 
-      if (!conversation) {
-        return res
-          .status(404)
-          .json({ status: "error", message: "Conversation not found" });
-      }
-
-      // Delete conversation (cascades to messages)
-      await prisma.conversation.delete({
-        where: { id },
-      });
-
-      await clearChatCache(id);
-
-      res.status(200).json({
-        status: "success",
-        message: "Conversation deleted successfully",
-      });
-    } catch (error) {
-      next(error);
+    if (!chat) {
+      return res.status(404).json({ status: "error", message: "Chat not found" });
     }
+
+    if (chat.userId !== userId && chat.agentId !== userId) {
+      return res.status(403).json({
+        status: "error",
+        message: "You are not authorized to delete this chat",
+      });
+    }
+
+    await prisma.chat.delete({
+      where: { id },
+    });
+
+    res.status(200).json({
+      status: "success",
+      message: "Conversation deleted successfully",
+    });
+  } catch (error) {
+    next(error);
   }
-);
+});
+
+// @route   PUT /api/v1/chat/:id/messages/delivered
+// @desc    Mark all messages in a conversation as delivered
+// @access  Private
+router.put("/:id/messages/delivered", authenticateToken, async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id;
+    const prisma = getPrismaClient();
+
+    // Verify participant
+    const chat = await prisma.chat.findUnique({
+      where: { id },
+      select: { userId: true, agentId: true },
+    });
+
+    if (!chat) {
+      return res.status(404).json({ status: "error", message: "Chat not found" });
+    }
+
+    if (chat.userId !== userId && chat.agentId !== userId) {
+      return res.status(403).json({
+        status: "error",
+        message: "You are not authorized to access this chat",
+      });
+    }
+
+    const now = new Date();
+    await prisma.message.updateMany({
+      where: {
+        chatId: id,
+        senderId: { not: userId },
+        isDelivered: false,
+      },
+      data: { 
+        isDelivered: true,
+        deliveredAt: now
+      },
+    });
+
+    res.status(200).json({
+      status: "success",
+      message: "Messages marked as delivered",
+    });
+  } catch (error) {
+    next(error);
+  }
+});
 
 export default router;

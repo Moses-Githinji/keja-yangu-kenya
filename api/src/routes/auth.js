@@ -6,13 +6,18 @@ import { body, validationResult } from "express-validator";
 import { getPrismaClient } from "../config/database.js";
 import { sendEmail } from "../utils/email.js";
 import { sendSMS } from "../utils/sms.js";
+import { normalizeEmail } from "../utils/emailUtils.js";
 
 const router = express.Router();
 
-// Generate JWT Token
-const generateToken = (userId) => {
+// Generate JWT Token with optional expiration
+const generateToken = (userId, rememberMe = false) => {
+  const expiresIn = rememberMe
+    ? process.env.JWT_REMEMBER_ME_EXPIRES_IN || "30d"
+    : process.env.JWT_EXPIRES_IN || "1d";
+
   return jwt.sign({ userId }, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRES_IN || "7d",
+    expiresIn,
   });
 };
 
@@ -55,6 +60,10 @@ const validateLogin = [
     .normalizeEmail()
     .withMessage("Please provide a valid email"),
   body("password").notEmpty().withMessage("Password is required"),
+  body("rememberMe")
+    .optional()
+    .isBoolean()
+    .withMessage("Remember me must be a boolean"),
 ];
 
 // @route   POST /api/v1/auth/send-test-email
@@ -175,15 +184,18 @@ router.post("/register", validateRegistration, async (req, res) => {
       email,
       phone,
       password,
-      role = "USER", // Only USER role is allowed for registration
+      role = "USER",
     } = req.body;
+
+    // Normalize the email address
+    const normalizedEmail = normalizeEmail(email);
 
     const prisma = getPrismaClient();
 
     // Check if user already exists
     const existingUser = await prisma.user.findFirst({
       where: {
-        OR: [{ email: email.toLowerCase() }, { phone }],
+        OR: [{ email: normalizedEmail }, { phone }],
       },
     });
 
@@ -191,7 +203,7 @@ router.post("/register", validateRegistration, async (req, res) => {
       return res.status(400).json({
         status: "error",
         message:
-          existingUser.email === email.toLowerCase()
+          existingUser.email === normalizedEmail
             ? "Email already registered"
             : "Phone number already registered",
       });
@@ -220,7 +232,7 @@ router.post("/register", validateRegistration, async (req, res) => {
       data: {
         firstName,
         lastName,
-        email,
+        email: normalizedEmail,
         phone,
         password: hashedPassword,
         role,
@@ -231,8 +243,8 @@ router.post("/register", validateRegistration, async (req, res) => {
         // No agent profile creation for USER registration
         preferences: {
           create: {
-            propertyTypes: [],
-            locations: [],
+            propertyTypes: "",
+            locations: "",
             emailNotifications: true,
             smsNotifications: true,
             pushNotifications: true,
@@ -305,7 +317,7 @@ router.post("/login", validateLogin, async (req, res) => {
       });
     }
 
-    const { email, password } = req.body;
+    const { email, password, rememberMe = false } = req.body;
 
     console.log("🔍 Login attempt for email:", email);
     console.log("🔍 Email after toLowerCase():", email.toLowerCase());
@@ -388,9 +400,21 @@ router.post("/login", validateLogin, async (req, res) => {
       });
     }
 
-    // Generate tokens
-    const accessToken = generateToken(user.id);
+    // Generate tokens with remember me option
+    const accessToken = generateToken(user.id, rememberMe);
     const refreshToken = generateRefreshToken(user.id);
+
+    // Set cookie with appropriate expiration
+    const tokenExpiry = rememberMe
+      ? 30 * 24 * 60 * 60 * 1000 // 30 days in milliseconds
+      : 24 * 60 * 60 * 1000; // 1 day in milliseconds
+
+    res.cookie("token", accessToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: tokenExpiry,
+    });
 
     // Remove sensitive data from response
     const { password: _, ...userResponse } = user;
@@ -416,6 +440,7 @@ router.post("/login", validateLogin, async (req, res) => {
     res.status(500).json({
       status: "error",
       message: "Login failed",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
     });
   }
 });
@@ -686,8 +711,6 @@ router.post("/verify-email", async (req, res) => {
     console.log("🔍 Email verification request received:", {
       email: req.body.email,
       code: req.body.code,
-      body: req.body,
-      headers: req.headers,
     });
 
     const { email, code } = req.body;
@@ -705,80 +728,51 @@ router.post("/verify-email", async (req, res) => {
 
     const prisma = getPrismaClient();
 
-    console.log("🔍 Searching for user with email:", email.toLowerCase());
-
-    // First, check if user exists at all
-    const userExists = await prisma.user.findUnique({
+    // Find user by email
+    const user = await prisma.user.findUnique({
       where: { email: email.toLowerCase() },
-      select: {
-        id: true,
-        email: true,
-        emailVerificationCode: true,
-        emailVerificationExpires: true,
-        isVerified: true,
-        role: true,
-        createdAt: true,
-      },
     });
 
-    console.log("🔍 User exists check:", {
-      exists: !!userExists,
-      details: userExists
-        ? {
-            id: userExists.id,
-            email: userExists.email,
-            role: userExists.role,
-            isVerified: userExists.isVerified,
-            emailVerificationCode: userExists.emailVerificationCode,
-            emailVerificationExpires: userExists.emailVerificationExpires,
-            createdAt: userExists.createdAt,
-            currentTime: new Date().toISOString(),
-            isExpired: userExists.emailVerificationExpires
-              ? userExists.emailVerificationExpires <= new Date()
-              : true,
-          }
-        : null,
-    });
-
-    const user = await prisma.user.findFirst({
-      where: {
-        email: email.toLowerCase(),
-        emailVerificationCode: code,
-        emailVerificationExpires: { gt: new Date() },
-      },
-    });
-
-    console.log("🔍 Verification query result:", {
-      userFound: !!user,
-      codeMatches: userExists?.emailVerificationCode === code,
-      isExpired: userExists?.emailVerificationExpires
-        ? userExists.emailVerificationExpires <= new Date()
-        : true,
-    });
-
-    if (user) {
-      console.log("🔍 User details:", {
-        id: user.id,
-        email: user.email,
-        emailVerificationCode: user.emailVerificationCode,
-        emailVerificationExpires: user.emailVerificationExpires,
-        isVerified: user.isVerified,
+    if (!user) {
+      console.log("❌ User not found:", email);
+      return res.status(404).json({
+        status: "error",
+        message: "User not found",
       });
     }
 
-    if (!user) {
-      console.log(
-        "❌ No user found with matching email and valid verification code"
-      );
+    // Check if user is already verified
+    if (user.isVerified) {
+      return res.status(400).json({
+        status: "error",
+        message: "Email is already verified",
+      });
+    }
+
+    // Check if verification code matches and is not expired
+    const now = new Date();
+    if (
+      user.emailVerificationCode !== code ||
+      !user.emailVerificationExpires ||
+      new Date(user.emailVerificationExpires) < now
+    ) {
+      console.log("❌ Invalid or expired verification code:", {
+        providedCode: code,
+        expectedCode: user.emailVerificationCode,
+        expires: user.emailVerificationExpires,
+        currentTime: now,
+        isExpired: user.emailVerificationExpires
+          ? new Date(user.emailVerificationExpires) < now
+          : true,
+      });
+
       return res.status(400).json({
         status: "error",
         message: "Invalid or expired verification code",
       });
     }
 
-    console.log("✅ Verification successful, updating user...");
-
-    // Mark email as verified
+    // Update user as verified
     await prisma.user.update({
       where: { id: user.id },
       data: {
@@ -788,7 +782,7 @@ router.post("/verify-email", async (req, res) => {
       },
     });
 
-    console.log("✅ Email verification completed successfully");
+    console.log("✅ Email verification successful for:", email);
 
     res.status(200).json({
       status: "success",
@@ -798,13 +792,13 @@ router.post("/verify-email", async (req, res) => {
     console.error("❌ Email verification error:", error);
     res.status(500).json({
       status: "error",
-      message: "Email verification failed",
+      message: "Failed to verify email",
     });
   }
 });
 
 // @route   POST /api/v1/auth/resend-verification
-// @desc    Resend verification codes
+// @desc    Resend verification code to email or phone
 // @access  Public
 router.post("/resend-verification", async (req, res) => {
   try {
@@ -819,16 +813,15 @@ router.post("/resend-verification", async (req, res) => {
 
     const prisma = getPrismaClient();
 
-    let user;
-    if (email) {
-      user = await prisma.user.findUnique({
-        where: { email: email.toLowerCase() },
-      });
-    } else {
-      user = await prisma.user.findUnique({
-        where: { phone },
-      });
-    }
+    // Find user by email or phone
+    const user = await prisma.user.findFirst({
+      where: {
+        OR: [
+          email ? { email: email.toLowerCase() } : {},
+          phone ? { phone } : {},
+        ],
+      },
+    });
 
     if (!user) {
       return res.status(404).json({
@@ -847,8 +840,8 @@ router.post("/resend-verification", async (req, res) => {
     let emailResult = null;
     let smsResult = null;
 
-    // Resend email verification code
-    if (email && !user.isVerified) {
+    // Resend email verification code if email is provided
+    if (email) {
       const emailVerificationCode = Math.floor(
         100000 + Math.random() * 900000
       ).toString();
@@ -862,19 +855,24 @@ router.post("/resend-verification", async (req, res) => {
         },
       });
 
-      emailResult = await sendEmail({
-        to: user.email,
-        subject: "Verify Your Email - KejaYangu",
-        template: "email-verification-code",
-        data: {
-          name: user.firstName,
-          verificationCode: emailVerificationCode,
-        },
-      });
+      try {
+        emailResult = await sendEmail({
+          to: user.email,
+          subject: "Verify Your Email - KejaYangu",
+          template: "email-verification-code",
+          data: {
+            name: user.firstName,
+            verificationCode: emailVerificationCode,
+          },
+        });
+        console.log("✅ Email verification code sent to:", user.email);
+      } catch (emailError) {
+        console.error("❌ Failed to send verification email:", emailError);
+      }
     }
 
-    // Resend phone verification code
-    if (phone && !user.isVerified) {
+    // Resend phone verification code if phone is provided
+    if (phone) {
       const phoneVerificationCode = Math.floor(
         100000 + Math.random() * 900000
       ).toString();
@@ -888,25 +886,59 @@ router.post("/resend-verification", async (req, res) => {
         },
       });
 
-      smsResult = await sendSMS({
-        to: user.phone,
-        message: `Your KejaYangu verification code is: ${phoneVerificationCode}. Valid for 10 minutes.`,
+      try {
+        smsResult = await sendSMS({
+          to: user.phone,
+          message: `Your KejaYangu verification code is: ${phoneVerificationCode}. Valid for 10 minutes.`,
+        });
+        console.log("✅ SMS verification code sent to:", user.phone);
+      } catch (smsError) {
+        console.error("❌ Failed to send verification SMS:", smsError);
+      }
+    }
+
+    // If both email and phone were provided but neither was sent successfully
+    if (email && !emailResult && phone && !smsResult) {
+      return res.status(500).json({
+        status: "error",
+        message: "Failed to send verification codes. Please try again later.",
       });
     }
 
+    // If email was provided but failed to send
+    if (email && !emailResult) {
+      return res.status(500).json({
+        status: "error",
+        message:
+          "Failed to send email verification code. Please try again later.",
+        smsSent: !!smsResult,
+      });
+    }
+
+    // If phone was provided but failed to send
+    if (phone && !smsResult) {
+      return res.status(500).json({
+        status: "error",
+        message:
+          "Failed to send SMS verification code. Please try again later.",
+        emailSent: !!emailResult,
+      });
+    }
+
+    // If we get here, at least one verification was sent successfully
     res.status(200).json({
       status: "success",
-      message: "Verification codes sent successfully",
+      message: "Verification code(s) sent successfully",
       data: {
-        email: emailResult ? "sent" : "skipped",
-        sms: smsResult ? "sent" : "skipped",
+        emailSent: !!emailResult,
+        smsSent: !!smsResult,
       },
     });
   } catch (error) {
     console.error("Resend verification error:", error);
     res.status(500).json({
       status: "error",
-      message: "Failed to resend verification codes",
+      message: "An error occurred while processing your request",
     });
   }
 });

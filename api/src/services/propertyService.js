@@ -220,33 +220,94 @@ export const getFeaturedProperties = async (limit = 6) => {
 /**
  * Get similar properties
  * @param {string} propertyId - Property ID to find similar properties for
- * @param {string} propertyType - Property type
+ * @param {Object} filters - Filter criteria (propertyType, location, bedrooms, priceRange)
  * @param {number} limit - Maximum number of properties to return
  * @returns {Promise<Array>} List of similar properties
  */
-export const getSimilarProperties = async (propertyId, propertyType, limit = 4) => {
+export const getSimilarProperties = async (propertyId, filters = {}, limit = 4) => {
   const prisma = getPrismaClient();
   
+  // Get the current property to compare against
+  const currentProperty = await prisma.property.findUnique({
+    where: { id: propertyId },
+    select: {
+      propertyType: true,
+      city: true,
+      county: true,
+      bedrooms: true,
+      price: true,
+      areaSize: true
+    }
+  });
+
+  if (!currentProperty) {
+    throw new Error('Property not found');
+  }
+
+  // Build the where clause for similar properties
+  const where = {
+    id: { not: propertyId },
+    status: 'ACTIVE',
+    propertyType: filters.propertyType || currentProperty.propertyType,
+    OR: [
+      { city: filters.location || currentProperty.city },
+      { county: filters.location || currentProperty.county }
+    ]
+  };
+
+  // Add bedroom filter if specified or if current property has bedrooms
+  if (filters.bedrooms || currentProperty.bedrooms) {
+    const targetBedrooms = filters.bedrooms || currentProperty.bedrooms;
+    where.bedrooms = {
+      gte: Math.max(1, targetBedrooms - 1),
+      lte: targetBedrooms + 1
+    };
+  }
+
+  // Add price range filter (within 20% of current price)
+  if (currentProperty.price) {
+    const priceVariance = currentProperty.price * 0.2;
+    where.price = {
+      gte: currentProperty.price - priceVariance,
+      lte: currentProperty.price + priceVariance
+    };
+  }
+
+  // Add area size filter (within 20% of current area)
+  if (currentProperty.areaSize) {
+    const areaVariance = currentProperty.areaSize * 0.2;
+    where.areaSize = {
+      gte: currentProperty.areaSize - areaVariance,
+      lte: currentProperty.areaSize + areaVariance
+    };
+  }
+
   return prisma.property.findMany({
-    where: {
-      id: { not: propertyId },
-      propertyType,
-      status: 'ACTIVE'
-    },
+    where,
     take: limit,
     include: {
-      images: { take: 1 },
+      images: { 
+        take: 1,
+        where: { isPrimary: true }
+      },
       agent: {
         select: {
           id: true,
-          name: true,
-          company: true
+          firstName: true,
+          lastName: true,
+          agentProfile: {
+            select: {
+              company: true,
+              avatar: true
+            }
+          }
         }
       }
     },
-    orderBy: {
-      updatedAt: 'desc'
-    }
+    orderBy: [
+      { isFeatured: 'desc' },
+      { updatedAt: 'desc' }
+    ]
   });
 };
 

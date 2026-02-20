@@ -177,7 +177,7 @@ router.get("/", optionalAuth, async (req, res, next) => {
         take: parseInt(limit),
         include: {
           images: {
-            where: { isPrimary: true },
+            orderBy: { order: "asc" },
           },
           owner: {
             select: {

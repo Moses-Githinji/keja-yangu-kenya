@@ -164,6 +164,25 @@ export const requireAgent = (req, res, next) => {
   next();
 };
 
+// Host-specific middleware
+export const requireHost = (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({
+      status: "error",
+      message: "Authentication required",
+    });
+  }
+
+  if (req.user.role !== "HOST" && req.user.role !== "ADMIN") {
+    return res.status(403).json({
+      status: "error",
+      message: "Host access required",
+    });
+  }
+
+  next();
+};
+
 // Admin-only middleware
 export const requireAdmin = (req, res, next) => {
   if (!req.user) {

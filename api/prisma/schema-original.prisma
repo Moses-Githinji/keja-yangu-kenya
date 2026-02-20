@@ -14,7 +14,7 @@ model User {
   email                    String                  @unique
   phone                    String?                 @unique
   password                 String
-  role                     String                  @default("USER")
+  role                     UserRole                @default(USER)
   isActive                 Boolean                 @default(true)
   isVerified               Boolean                 @default(false)
   avatar                   String?
@@ -30,11 +30,6 @@ model User {
   phoneVerificationExpires DateTime?
   createdAt                DateTime                @default(now())
   updatedAt                DateTime                @updatedAt
-  loginAttempts            Int                     @default(0)
-  lockUntil                DateTime?
-  lastLogin                DateTime?
-  isOnline                 Boolean                 @default(false)
-  lastSeen                 DateTime?               @default(now())
   agentProfile             AgentProfile?
   contentCreatorProfile    ContentCreatorProfile?
   agentChats               Chat[]                  @relation("AgentChats")
@@ -55,11 +50,6 @@ model User {
   creatorPayouts           CreatorPayouts[]
   adRevenue                AdRevenue[]
   adImpressions            AdImpression[]
-  securityLogs             SecurityLog[]
-  guestBookings            ShortTermBooking[]    @relation("GuestBookings")
-  hostBookings             ShortTermBooking[]    @relation("HostBookings")
-  authoredReviews          BookingReview[]       @relation("ReviewAuthor")
-  receivedReviews          BookingReview[]       @relation("ReviewRecipient")
 
   @@map("users")
 }
@@ -67,8 +57,8 @@ model User {
 model UserPreferences {
   id                 String         @id @default(cuid())
   userId             String         @unique
-  propertyTypes      String         // Comma-separated values
-  locations          String         // Comma-separated values
+  propertyTypes      PropertyType[]
+  locations          String[]
   emailNotifications Boolean        @default(true)
   smsNotifications   Boolean        @default(true)
   pushNotifications  Boolean        @default(true)
@@ -85,7 +75,7 @@ model AgentProfile {
   company          String?
   licenseNumber    String?   @unique
   experience       Int?
-  specializations  String    // Comma-separated values
+  specializations  String[]
   bio              String?
   website          String?
   isVerified       Boolean   @default(false)
@@ -119,7 +109,7 @@ model FacebookAuth {
   accessToken String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("facebook_auth")
 }
@@ -128,9 +118,9 @@ model Property {
   id                String                  @id @default(cuid())
   title             String
   description       String
-  propertyType      String
-  listingType       String
-  status            String                  @default("ACTIVE")
+  propertyType      PropertyType
+  listingType       ListingType
+  status            PropertyStatus          @default(ACTIVE)
   address           String
   city              String
   county            String
@@ -140,20 +130,20 @@ model Property {
   longitude         Float
   price             Float
   currency          String                  @default("KES")
-  priceType         String                  @default("FIXED")
-  rentPeriod        String?
+  priceType         PriceType               @default(FIXED)
+  rentPeriod        RentPeriod?
   deposit           Float?
   bedrooms          Int?
   bathrooms         Int?
   area              String?
   areaSize          Float
-  areaUnit          String                  @default("SQM")
+  areaUnit          AreaUnit                @default(SQM)
   yearBuilt         Int?
   floors            Int?
   parkingSpaces     Int?
-  features          String                  // Comma-separated values
-  amenities         String                  // Comma-separated values
-  nearbyAmenities   String                  // Comma-separated values
+  features          String[]
+  amenities         String[]
+  nearbyAmenities   String[]
   ownerId           String
   agentId           String?
   isFeatured        Boolean                 @default(false)
@@ -180,8 +170,6 @@ model Property {
   earnings          PropertyEarnings[]
   adImpressions     AdImpression[]
   adRevenue         AdRevenue[]
-  shortTermBookings ShortTermBooking[]
-  calendar          PropertyCalendar[]
 
   @@index([ownerId])
   @@index([agentId])
@@ -299,8 +287,6 @@ model Message {
   content     String
   messageType String   @default("TEXT")
   isRead      Boolean  @default(false)
-  isDelivered Boolean  @default(false)
-  deliveredAt DateTime?
   createdAt   DateTime @default(now())
   chat        Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
   sender      User     @relation(fields: [senderId], references: [id], onDelete: Cascade)
@@ -332,37 +318,27 @@ model Payment {
   propertyId    String?
   amount        Float
   currency      String        @default("KES")
-  provider      String
-  transactionRef String       @unique
-  status        String        @default("PENDING")
+  status        PaymentStatus @default(PENDING)
+  method        PaymentMethod
+  transactionId String?       @unique
+  description   String?
+  metadata      Json?
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
-  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   property      Property?     @relation(fields: [propertyId], references: [id])
-  logs          PaymentLog[]
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("payments")
-}
-
-model PaymentLog {
-  id         String   @id @default(cuid())
-  paymentId  String
-  action     String
-  details    String?
-  timestamp  DateTime @default(now())
-  payment    Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
-
-  @@map("payment_logs")
 }
 
 model Notification {
   id        String             @id @default(cuid())
   userId    String
-  type      String
+  type      NotificationType
   title     String
   message   String
-  status    String             @default("UNREAD")
-  metadata  String?            // JSON as string
+  status    NotificationStatus @default(UNREAD)
+  metadata  Json?
   readAt    DateTime?
   createdAt DateTime           @default(now())
   user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -378,7 +354,7 @@ model ContentCreatorProfile {
   userId              String                  @unique
   isEnrolled          Boolean                 @default(false)
   enrollmentDate      DateTime?
-  enrollmentStatus    String                  @default("PENDING")
+  enrollmentStatus    CreatorEnrollmentStatus @default(PENDING)
   totalEarnings       Float                   @default(0)
   totalPayouts        Float                   @default(0)
   availableBalance    Float                   @default(0)
@@ -388,9 +364,9 @@ model ContentCreatorProfile {
   adRevenueRate       Float                   @default(0.70) // 70% of ad revenue
   minimumPayout       Float                   @default(100) // Minimum KES for payout
   taxId               String?                 @unique
-  bankAccount         String?                 // JSON as string
+  bankAccount         Json? // Bank account details
   mpesaNumber         String?
-  payoutMethod        String                  @default("MPESA")
+  payoutMethod        PayoutMethod            @default(MPESA)
   isTaxExempt         Boolean                 @default(false)
   taxRate             Float                   @default(0.16) // 16% VAT
   complianceScore     Int                     @default(100)
@@ -410,7 +386,7 @@ model PropertyEarnings {
   id              String                @id @default(cuid())
   propertyId      String
   creatorId       String
-  earningsType    String
+  earningsType    EarningsType
   amount          Float
   currency        String                @default("KES")
   views           Int                   @default(0)
@@ -434,14 +410,14 @@ model CreatorPayouts {
   creatorId      String
   amount         Float
   currency       String                @default("KES")
-  method         String
-  status         String                @default("PENDING")
+  method         PayoutMethod
+  status         PayoutStatus          @default(PENDING)
   transactionId  String?               @unique
   bankReference  String?
   mpesaReference String?
   processedAt    DateTime?
   failureReason  String?
-  metadata       String?               // JSON as string
+  metadata       Json?
   createdAt      DateTime              @default(now())
   updatedAt      DateTime              @updatedAt
   creator        ContentCreatorProfile @relation(fields: [creatorId], references: [id], onDelete: Cascade)
@@ -455,7 +431,7 @@ model AdRevenue {
   id          String                @id @default(cuid())
   creatorId   String
   propertyId  String?
-  adType      String
+  adType      AdType
   impressions Int
   clicks      Int
   revenue     Float
@@ -477,14 +453,14 @@ model AdRevenue {
 model AdImpression {
   id             String         @id @default(cuid())
   propertyId     String
-  adType         String
-  impressionType String
+  adType         AdType
+  impressionType ImpressionType
   revenue        Float
   currency       String         @default("KES")
   timestamp      DateTime       @default(now())
   userAgent      String?
   ipAddress      String?
-  location       String?        // JSON as string
+  location       Json? // Geographic location data
   property       Property?      @relation(fields: [propertyId], references: [id])
   User           User?          @relation(fields: [userId], references: [id])
   userId         String?
@@ -495,10 +471,10 @@ model AdImpression {
 model ComplianceViolation {
   id              String                @id @default(cuid())
   creatorId       String
-  violationType   String
-  severity        String
+  violationType   ViolationType
+  severity        ViolationSeverity
   description     String
-  evidence        String?               // JSON as string
+  evidence        Json?
   isResolved      Boolean               @default(false)
   resolvedAt      DateTime?
   resolutionNotes String?
@@ -510,126 +486,158 @@ model ComplianceViolation {
   @@map("compliance_violations")
 }
 
-// Security models for payment protection
-model SecurityLog {
-  id        String   @id @default(cuid())
-  type      String
-  severity  String   @default("LOW") // LOW, MEDIUM, HIGH, CRITICAL
-  userId    String?
-  ipAddress String
-  userAgent String?
-  endpoint  String
-  method    String
-  details   String?  // JSON as string
-  createdAt DateTime @default(now())
-  user      User?    @relation(fields: [userId], references: [id])
-
-  @@index([userId])
-  @@index([ipAddress])
-  @@index([type])
-  @@index([createdAt])
-  @@map("security_logs")
+enum UserRole {
+  USER
+  AGENT
+  ADMIN
+  CONTENT_CREATOR
 }
 
-model BlockedIP {
-  id         String   @id @default(cuid())
-  ipAddress  String   @unique
-  reason     String
-  blockedBy  String?
-  blockedAt  DateTime @default(now())
-  expiresAt  DateTime?
-  isActive   Boolean  @default(true)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
-  @@map("blocked_ips")
+enum PropertyType {
+  HOUSE
+  APARTMENT
+  VILLA
+  TOWNHOUSE
+  LAND
+  DUPLEX
+  FARMHOUSE
+  PENTHOUSE
+  COMMERCIAL
+  STUDENT_HOSTEL
+  INDUSTRIAL
+  BEACH_HOUSE
+  SERVICED
+  STUDIO
 }
 
-// Short-term rental models
-model ShortTermBooking {
-  id            String            @id @default(cuid())
-  propertyId    String
-  guestId       String
-  hostId        String
-  checkIn       DateTime
-  checkOut      DateTime
-  guests        Int               @default(1)
-  totalAmount   Float
-  currency      String            @default("KES")
-  status        String            @default("PENDING") // PENDING, CONFIRMED, CANCELLED, COMPLETED
-  bookingCode   String            @unique
-  specialRequests String?
-  createdAt     DateTime          @default(now())
-  updatedAt     DateTime          @updatedAt
-  confirmedAt   DateTime?
-  cancelledAt   DateTime?
-  completedAt   DateTime?
-  property      Property          @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  guest         User              @relation("GuestBookings", fields: [guestId], references: [id], onDelete: Cascade)
-  host          User              @relation("HostBookings", fields: [hostId], references: [id], onDelete: Cascade)
-  payments      BookingPayment[]
-  reviews       BookingReview[]
-
-  @@index([propertyId])
-  @@index([guestId])
-  @@index([hostId])
-  @@index([status])
-  @@index([checkIn, checkOut])
-  @@map("short_term_bookings")
+enum ListingType {
+  SALE
+  RENT
+  BOTH
 }
 
-model BookingPayment {
-  id         String            @id @default(cuid())
-  bookingId  String
-  amount     Float
-  currency   String            @default("KES")
-  provider   String
-  status     String            @default("PENDING")
-  reference  String            @unique
-  createdAt  DateTime          @default(now())
-  updatedAt  DateTime          @updatedAt
-  booking    ShortTermBooking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-
-  @@map("booking_payments")
+enum PropertyStatus {
+  ACTIVE
+  PENDING
+  SOLD
+  RENTED
+  INACTIVE
+  UNDER_CONTRACT
 }
 
-model BookingReview {
-  id         String            @id @default(cuid())
-  bookingId  String
-  reviewerId String
-  revieweeId String
-  rating     Int               // 1-5 stars
-  title      String?
-  comment    String
-  reviewType String            // GUEST_TO_HOST or HOST_TO_GUEST
-  createdAt  DateTime          @default(now())
-  updatedAt  DateTime          @updatedAt
-  booking    ShortTermBooking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  reviewer   User              @relation("ReviewAuthor", fields: [reviewerId], references: [id], onDelete: Cascade)
-  reviewee   User              @relation("ReviewRecipient", fields: [revieweeId], references: [id], onDelete: Cascade)
-
-  @@index([bookingId])
-  @@index([reviewerId])
-  @@index([revieweeId])
-  @@map("booking_reviews")
+enum PriceType {
+  FIXED
+  NEGOTIABLE
+  ON_REQUEST
 }
 
-model PropertyCalendar {
-  id           String   @id @default(cuid())
-  propertyId   String
-  date         DateTime
-  isAvailable  Boolean  @default(true)
-  price        Float?
-  currency     String   @default("KES")
-  minStay      Int      @default(1)
-  maxStay      Int?
-  notes        String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  property     Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+enum RentPeriod {
+  MONTHLY
+  WEEKLY
+  DAILY
+  YEARLY
+}
 
-  @@unique([propertyId, date])
-  @@index([propertyId])
-  @@index([date])
-  @@map("property_calendar")
+enum AreaUnit {
+  SQM
+  SQFT
+  ACRES
+  HECTARES
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  CANCELLED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  STRIPE
+  MPESA
+  BANK_TRANSFER
+  CASH
+}
+
+enum NotificationType {
+  PROPERTY_INQUIRY
+  APPOINTMENT_REMINDER
+  PRICE_UPDATE
+  NEW_PROPERTY
+  SYSTEM_UPDATE
+}
+
+enum NotificationStatus {
+  UNREAD
+  READ
+  ARCHIVED
+}
+
+// New enums for monetization system
+
+enum CreatorEnrollmentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+  TERMINATED
+}
+
+enum EarningsType {
+  VIEW_BASED
+  INQUIRY_BASED
+  PREMIUM_LISTING
+  AD_REVENUE
+  BONUS
+  REFERRAL
+}
+
+enum PayoutMethod {
+  MPESA
+  BANK_TRANSFER
+  PAYPAL
+  STRIPE
+}
+
+enum PayoutStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum AdType {
+  BANNER
+  INTERSTITIAL
+  NATIVE
+  VIDEO
+  SEARCH
+  RECOMMENDATION
+}
+
+enum ImpressionType {
+  VIEW
+  CLICK
+  ENGAGEMENT
+  CONVERSION
+}
+
+enum ViolationType {
+  FAKE_PROPERTY
+  DUPLICATE_LISTING
+  MISLEADING_INFORMATION
+  INAPPROPRIATE_CONTENT
+  SPAM
+  COPYRIGHT_VIOLATION
+  LEGAL_COMPLIANCE
+  TAX_EVASION
+}
+
+enum ViolationSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
 }

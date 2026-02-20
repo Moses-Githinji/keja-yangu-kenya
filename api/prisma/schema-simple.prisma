@@ -30,11 +30,6 @@ model User {
   phoneVerificationExpires DateTime?
   createdAt                DateTime                @default(now())
   updatedAt                DateTime                @updatedAt
-  loginAttempts            Int                     @default(0)
-  lockUntil                DateTime?
-  lastLogin                DateTime?
-  isOnline                 Boolean                 @default(false)
-  lastSeen                 DateTime?               @default(now())
   agentProfile             AgentProfile?
   contentCreatorProfile    ContentCreatorProfile?
   agentChats               Chat[]                  @relation("AgentChats")
@@ -55,11 +50,6 @@ model User {
   creatorPayouts           CreatorPayouts[]
   adRevenue                AdRevenue[]
   adImpressions            AdImpression[]
-  securityLogs             SecurityLog[]
-  guestBookings            ShortTermBooking[]    @relation("GuestBookings")
-  hostBookings             ShortTermBooking[]    @relation("HostBookings")
-  authoredReviews          BookingReview[]       @relation("ReviewAuthor")
-  receivedReviews          BookingReview[]       @relation("ReviewRecipient")
 
   @@map("users")
 }
@@ -180,8 +170,6 @@ model Property {
   earnings          PropertyEarnings[]
   adImpressions     AdImpression[]
   adRevenue         AdRevenue[]
-  shortTermBookings ShortTermBooking[]
-  calendar          PropertyCalendar[]
 
   @@index([ownerId])
   @@index([agentId])
@@ -299,8 +287,6 @@ model Message {
   content     String
   messageType String   @default("TEXT")
   isRead      Boolean  @default(false)
-  isDelivered Boolean  @default(false)
-  deliveredAt DateTime?
   createdAt   DateTime @default(now())
   chat        Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
   sender      User     @relation(fields: [senderId], references: [id], onDelete: Cascade)
@@ -321,7 +307,7 @@ model PropertyInquiry {
   updatedAt         DateTime @updatedAt
   agent             User     @relation("AgentInquiries", fields: [agentId], references: [id], onDelete: Cascade)
   property          Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  user              User     @relation("UserInquiries", fields: [userId], references: [id], onDelete: Cascade)
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("property_inquiries")
 }
@@ -332,27 +318,17 @@ model Payment {
   propertyId    String?
   amount        Float
   currency      String        @default("KES")
-  provider      String
-  transactionRef String       @unique
   status        String        @default("PENDING")
+  method        String
+  transactionId String?       @unique
+  description   String?
+  metadata      String?       // JSON as string
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
-  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   property      Property?     @relation(fields: [propertyId], references: [id])
-  logs          PaymentLog[]
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("payments")
-}
-
-model PaymentLog {
-  id         String   @id @default(cuid())
-  paymentId  String
-  action     String
-  details    String?
-  timestamp  DateTime @default(now())
-  payment    Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
-
-  @@map("payment_logs")
 }
 
 model Notification {
@@ -508,128 +484,4 @@ model ComplianceViolation {
   creator         ContentCreatorProfile @relation(fields: [creatorId], references: [id], onDelete: Cascade)
 
   @@map("compliance_violations")
-}
-
-// Security models for payment protection
-model SecurityLog {
-  id        String   @id @default(cuid())
-  type      String
-  severity  String   @default("LOW") // LOW, MEDIUM, HIGH, CRITICAL
-  userId    String?
-  ipAddress String
-  userAgent String?
-  endpoint  String
-  method    String
-  details   String?  // JSON as string
-  createdAt DateTime @default(now())
-  user      User?    @relation(fields: [userId], references: [id])
-
-  @@index([userId])
-  @@index([ipAddress])
-  @@index([type])
-  @@index([createdAt])
-  @@map("security_logs")
-}
-
-model BlockedIP {
-  id         String   @id @default(cuid())
-  ipAddress  String   @unique
-  reason     String
-  blockedBy  String?
-  blockedAt  DateTime @default(now())
-  expiresAt  DateTime?
-  isActive   Boolean  @default(true)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
-  @@map("blocked_ips")
-}
-
-// Short-term rental models
-model ShortTermBooking {
-  id            String            @id @default(cuid())
-  propertyId    String
-  guestId       String
-  hostId        String
-  checkIn       DateTime
-  checkOut      DateTime
-  guests        Int               @default(1)
-  totalAmount   Float
-  currency      String            @default("KES")
-  status        String            @default("PENDING") // PENDING, CONFIRMED, CANCELLED, COMPLETED
-  bookingCode   String            @unique
-  specialRequests String?
-  createdAt     DateTime          @default(now())
-  updatedAt     DateTime          @updatedAt
-  confirmedAt   DateTime?
-  cancelledAt   DateTime?
-  completedAt   DateTime?
-  property      Property          @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  guest         User              @relation("GuestBookings", fields: [guestId], references: [id], onDelete: Cascade)
-  host          User              @relation("HostBookings", fields: [hostId], references: [id], onDelete: Cascade)
-  payments      BookingPayment[]
-  reviews       BookingReview[]
-
-  @@index([propertyId])
-  @@index([guestId])
-  @@index([hostId])
-  @@index([status])
-  @@index([checkIn, checkOut])
-  @@map("short_term_bookings")
-}
-
-model BookingPayment {
-  id         String            @id @default(cuid())
-  bookingId  String
-  amount     Float
-  currency   String            @default("KES")
-  provider   String
-  status     String            @default("PENDING")
-  reference  String            @unique
-  createdAt  DateTime          @default(now())
-  updatedAt  DateTime          @updatedAt
-  booking    ShortTermBooking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-
-  @@map("booking_payments")
-}
-
-model BookingReview {
-  id         String            @id @default(cuid())
-  bookingId  String
-  reviewerId String
-  revieweeId String
-  rating     Int               // 1-5 stars
-  title      String?
-  comment    String
-  reviewType String            // GUEST_TO_HOST or HOST_TO_GUEST
-  createdAt  DateTime          @default(now())
-  updatedAt  DateTime          @updatedAt
-  booking    ShortTermBooking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  reviewer   User              @relation("ReviewAuthor", fields: [reviewerId], references: [id], onDelete: Cascade)
-  reviewee   User              @relation("ReviewRecipient", fields: [revieweeId], references: [id], onDelete: Cascade)
-
-  @@index([bookingId])
-  @@index([reviewerId])
-  @@index([revieweeId])
-  @@map("booking_reviews")
-}
-
-model PropertyCalendar {
-  id           String   @id @default(cuid())
-  propertyId   String
-  date         DateTime
-  isAvailable  Boolean  @default(true)
-  price        Float?
-  currency     String   @default("KES")
-  minStay      Int      @default(1)
-  maxStay      Int?
-  notes        String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  property     Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-
-  @@unique([propertyId, date])
-  @@index([propertyId])
-  @@index([date])
-  @@map("property_calendar")
 }
