@@ -1,0 +1,88 @@
+Backend Implementation Flow for Messaging System
+================================================
+
+1. Database Schema
+------------------
+Ensure the following Prisma models exist and are correctly related:
+
+model Chat {
+  id         String    @id @default(cuid())
+  userId     String
+  agentId    String
+  propertyId String?
+  isActive   Boolean   @default(true)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  agent      User      @relation("AgentChats", fields: [agentId], references: [id], onDelete: Cascade)
+  property   Property? @relation(fields: [propertyId], references: [id])
+  user       User      @relation("UserChats", fields: [userId], references: [id], onDelete: Cascade)
+  messages   Message[]
+
+  @@unique([userId, agentId, propertyId])
+  @@map("chats")
+}
+
+model Message {
+  id          String   @id @default(cuid())
+  chatId      String
+  senderId    String
+  content     String
+  messageType String   @default("TEXT")
+  isRead      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  chat        Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  sender      User     @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@map("messages")
+}
+
+2. API Routes
+-------------
+Implement the following routes in `src/routes/chat.js` (or similar):
+
+- POST /chat
+  - Purpose: Create or retrieve an existing chat conversation.
+  - Body: { propertyId, agentId }
+  - Logic: 
+    - Check if Chat exists for (userId, agentId, propertyId).
+    - If yes, return it.
+    - If no, create new Chat.
+
+- GET /chat
+  - Purpose: List user's conversations.
+  - Logic: Fetch Chats where userId OR agentId matches current user. Include last message and other participant details.
+
+- GET /chat/:id/messages
+  - Purpose: Get message history.
+  - Logic: Fetch Messages for chat :id. Implement pagination (optional).
+
+- POST /chat/:id/messages
+  - Purpose: Send a message.
+  - Body: { content }
+  - Logic:
+    - Create Message record.
+    - Update Chat.updatedAt.
+    - Emit socket event 'new-message' to room `conversation-{chatId}`.
+
+3. Socket.IO Implementation (server.js)
+---------------------------------------
+Configure Socket.IO in `server.js`:
+
+- Middleware:
+  - Validate JWT token from `socket.handshake.auth.token`.
+  - Attach user info to `socket.user`.
+
+- Events:
+  - connection:
+    - Log connection.
+    - Join user to their own room `user-{userId}` (optional, for notifications).
+  
+  - join-conversation:
+    - Event: `socket.on('join-conversation', (conversationId) => { ... })`
+    - Logic: `socket.join("conversation-" + conversationId);`
+    
+  - disconnect:
+    - Log disconnection.
+
+- Broadcaster:
+  - In `POST /chat/:id/messages`, use `io.to("conversation-" + chatId).emit("new-message", { message: ..., conversationId: ... })`.
