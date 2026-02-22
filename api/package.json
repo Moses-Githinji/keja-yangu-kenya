@@ -26,6 +26,8 @@
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
+    "africastalking": "^0.7.9",
+    "apicache": "^1.6.3",
     "aws-sdk": "^2.1490.0",
     "axios": "^1.13.5",
     "bcryptjs": "^2.4.3",

@@ -7,6 +7,8 @@ import rateLimit from "express-rate-limit";
 import dotenv from "dotenv";
 import { createServer } from "http";
 import { Server } from "socket.io";
+import jwt from "jsonwebtoken";
+import apicache from "apicache";
 
 // Import logger
 import logger, { stream } from "./config/logger.js";
@@ -25,6 +27,7 @@ import contentCreatorRoutes from "./routes/content-creators.js";
 import briefStayRoutes from "./routes/brief-stay.js";
 import healthRoutes from "./routes/health.js";
 import adminRoutes from "./routes/admin.js";
+import ussdRoutes from "./routes/ussd.js";
 
 // Import specific payment functions for public routes
 import { handleMpesaCallback } from "./services/paymentService.js";
@@ -41,6 +44,7 @@ import connectDB, { getPrismaClient } from "./config/database.js";
 dotenv.config();
 
 const app = express();
+app.set("trust proxy", 1); // Trust the first proxy (ngrok, Vercel, etc.)
 const server = createServer(app);
 const io = new Server(server, {
   cors: {
@@ -138,6 +142,23 @@ app.options("*", cors());
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
+// Initialize API Cache
+const cache = apicache.middleware;
+const onlyStatus200 = (req, res) => res.statusCode === 200;
+const cacheOptions = {
+  statusCodes: {
+    include: [200]
+  }
+};
+
+// URL Normalization (Strip double slashes)
+app.use((req, res, next) => {
+  if (req.url.includes("//")) {
+    req.url = req.url.replace(/\/+/g, "/");
+  }
+  next();
+});
+
 // Compression middleware
 app.use(compression());
 
@@ -196,7 +217,7 @@ app.post(
 // API routes
 app.use(`/api/${API_VERSION}/auth`, authRoutes);
 app.use(`/api/${API_VERSION}/users`, authenticateToken, userRoutes);
-app.use(`/api/${API_VERSION}/properties`, propertyRoutes);
+app.use(`/api/${API_VERSION}/properties`, cache("5 minutes", onlyStatus200), propertyRoutes);
 app.use(`/api/${API_VERSION}/agents`, agentRoutes);
 app.use(`/api/${API_VERSION}/search`, searchRoutes);
 app.use(`/api/${API_VERSION}/chat`, authenticateToken, chatRoutes);
@@ -210,8 +231,7 @@ app.use(`/api/${API_VERSION}/upload`, authenticateToken, uploadRoutes);
 app.use(`/api/${API_VERSION}/content-creators`, contentCreatorRoutes);
 app.use(`/api/${API_VERSION}/brief-stay`, briefStayRoutes);
 app.use(`/api/${API_VERSION}/admin`, adminRoutes);
-
-import jwt from "jsonwebtoken";
+app.use(`/api/${API_VERSION}/internal/ussd`, ussdRoutes);
 
 // Socket.IO Middleware for Authentication
 io.use((socket, next) => {

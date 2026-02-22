@@ -56,12 +56,12 @@ router.get("/", optionalAuth, async (req, res, next) => {
     // Text search
     if (q) {
       where.OR = [
-        { title: { contains: q, mode: "insensitive" } },
-        { description: { contains: q, mode: "insensitive" } },
-        { address: { contains: q, mode: "insensitive" } },
-        { city: { contains: q, mode: "insensitive" } },
-        { county: { contains: q, mode: "insensitive" } },
-        { neighborhood: { contains: q, mode: "insensitive" } },
+        { title: { contains: q } },
+        { description: { contains: q } },
+        { address: { contains: q } },
+        { city: { contains: q } },
+        { county: { contains: q } },
+        { neighborhood: { contains: q } },
       ];
     }
 
@@ -107,10 +107,10 @@ router.get("/", optionalAuth, async (req, res, next) => {
 
     // Location filters
     if (city) {
-      where.city = { contains: city, mode: "insensitive" };
+      where.city = { contains: city };
     }
     if (county) {
-      where.county = { contains: county, mode: "insensitive" };
+      where.county = { contains: county };
     }
 
     // Features filter
@@ -276,7 +276,7 @@ router.get("/suggestions", async (req, res, next) => {
     if (type === "all" || type === "cities") {
       const cities = await prisma.property.findMany({
         where: {
-          city: { contains: q, mode: "insensitive" },
+          city: { contains: q },
         },
         select: { city: true },
         distinct: ["city"],
@@ -288,7 +288,7 @@ router.get("/suggestions", async (req, res, next) => {
     if (type === "all" || type === "counties") {
       const counties = await prisma.property.findMany({
         where: {
-          county: { contains: q, mode: "insensitive" },
+          county: { contains: q },
         },
         select: { county: true },
         distinct: ["county"],
@@ -303,8 +303,8 @@ router.get("/suggestions", async (req, res, next) => {
       const properties = await prisma.property.findMany({
         where: {
           OR: [
-            { title: { contains: q, mode: "insensitive" } },
-            { address: { contains: q, mode: "insensitive" } },
+            { title: { contains: q } },
+            { address: { contains: q } },
           ],
         },
         select: { title: true, address: true },

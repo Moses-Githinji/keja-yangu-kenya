@@ -15,12 +15,9 @@ if (process.env.NODE_ENV === 'production') {
   prisma = global.prisma;
 }
 
-export { prisma };
-
-// Helper function to get a new Prisma Client instance
-// Use this when you need to ensure a fresh connection
+// Helper function to get the Prisma Client singleton
 export const getPrismaClient = () => {
-  return new PrismaClient();
+  return prisma;
 };
 
 // Export the Prisma types

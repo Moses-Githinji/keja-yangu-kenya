@@ -131,3 +131,6 @@ dump.rdb
 
 # Session files
 sessions/
+
+# Frontend Integration Guidelines
+PROPERTY_ENHANCEMENT_GUIDELINES.txt

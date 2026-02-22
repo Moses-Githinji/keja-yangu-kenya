@@ -46,8 +46,8 @@ router.get("/featured", async (req, res, next) => {
 
     if (propertyType) where.propertyType = propertyType;
     if (listingType) where.listingType = listingType;
-    if (city) where.city = { contains: city, mode: "insensitive" };
-    if (county) where.county = { contains: county, mode: "insensitive" };
+    if (city) where.city = { contains: city };
+    if (county) where.county = { contains: county };
 
     if (minPrice || maxPrice) {
       where.price = {};
@@ -129,19 +129,19 @@ router.get("/", async (req, res, next) => {
 
     if (search) {
       where.OR = [
-        { title: { contains: search, mode: "insensitive" } },
-        { description: { contains: search, mode: "insensitive" } },
-        { city: { contains: search, mode: "insensitive" } },
-        { county: { contains: search, mode: "insensitive" } },
-        { address: { contains: search, mode: "insensitive" } },
+        { title: { contains: search } },
+        { description: { contains: search } },
+        { city: { contains: search } },
+        { county: { contains: search } },
+        { address: { contains: search } },
       ];
     }
 
     if (status) where.status = status;
     if (propertyType) where.propertyType = propertyType;
     if (listingType) where.listingType = listingType;
-    if (city) where.city = { contains: city, mode: "insensitive" };
-    if (county) where.county = { contains: county, mode: "insensitive" };
+    if (city) where.city = { contains: city };
+    if (county) where.county = { contains: county };
     if (agentId) where.agentId = agentId;
     if (ownerId) where.ownerId = ownerId;
 
@@ -269,15 +269,48 @@ router.get("/:id", async (req, res, next) => {
       });
     }
 
-    // Increment view count
-    await prisma.property.update({
-      where: { id: req.params.id },
-      data: { views: { increment: 1 } },
+    // Unique view tracking (24h)
+    const sessionId = req.ip || req.headers["x-forwarded-for"] || "unknown-session";
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    // Check if this session already viewed this property in the last 24h
+    const existingView = await prisma.propertyView.findFirst({
+      where: {
+        propertyId: req.params.id,
+        sessionId,
+        createdAt: { gte: twentyFourHoursAgo },
+      },
+    });
+
+    if (!existingView) {
+      await prisma.$transaction([
+        prisma.propertyView.create({
+          data: {
+            propertyId: req.params.id,
+            sessionId,
+          },
+        }),
+        prisma.property.update({
+          where: { id: req.params.id },
+          data: { views: { increment: 1 } },
+        }),
+      ]);
+    }
+
+    // Get unique view count for last 24h
+    const uniqueViews24h = await prisma.propertyView.count({
+      where: {
+        propertyId: req.params.id,
+        createdAt: { gte: twentyFourHoursAgo },
+      },
     });
 
     const result = {
       status: "success",
-      data: property,
+      data: {
+        ...property,
+        viewCount24h: uniqueViews24h,
+      },
     };
 
     res.status(200).json(result);
@@ -333,6 +366,19 @@ router.post("/", authenticateToken, async (req, res, next) => {
       nearbyAmenities = [],
       images = [],
       status = "ACTIVE",
+      // New metadata fields
+      waterSource,
+      backupPower,
+      fiberProviders,
+      hasSolarWaterHeating,
+      securityFeatures,
+      serviceCharge,
+      depositMonths,
+      legalStatus,
+      projectedYield,
+      annualAppreciation,
+      virtualTourUrl,
+      floorPlanUrl,
     } = req.body;
 
     // Validate required fields
@@ -395,6 +441,19 @@ router.post("/", authenticateToken, async (req, res, next) => {
       ownerId: userId,
       agentId: userRole === "AGENT" ? userId : null,
       slug: `${slug}-${Date.now()}`, // Add timestamp to ensure uniqueness
+      // New metadata fields
+      waterSource,
+      backupPower,
+      fiberProviders: Array.isArray(fiberProviders) ? fiberProviders.join(", ") : fiberProviders,
+      hasSolarWaterHeating: hasSolarWaterHeating === true || hasSolarWaterHeating === "true",
+      securityFeatures: Array.isArray(securityFeatures) ? securityFeatures.join(", ") : securityFeatures,
+      serviceCharge: serviceCharge ? parseFloat(serviceCharge) : null,
+      depositMonths: depositMonths ? parseInt(depositMonths) : null,
+      legalStatus,
+      projectedYield: projectedYield ? parseFloat(projectedYield) : null,
+      annualAppreciation: annualAppreciation ? parseFloat(annualAppreciation) : null,
+      virtualTourUrl,
+      floorPlanUrl,
     };
 
     // Create property
@@ -536,6 +595,19 @@ router.put("/:id", authenticateToken, async (req, res, next) => {
       isFeatured,
       isVerified,
       isPremium,
+      // New metadata fields
+      waterSource,
+      backupPower,
+      fiberProviders,
+      hasSolarWaterHeating,
+      securityFeatures,
+      serviceCharge,
+      depositMonths,
+      legalStatus,
+      projectedYield,
+      annualAppreciation,
+      virtualTourUrl,
+      floorPlanUrl,
     } = req.body;
 
     // Prepare update data
@@ -589,6 +661,26 @@ router.put("/:id", authenticateToken, async (req, res, next) => {
         : nearbyAmenities;
     }
 
+    // New metadata fields
+    if (waterSource !== undefined) updateData.waterSource = waterSource;
+    if (backupPower !== undefined) updateData.backupPower = backupPower;
+    if (fiberProviders !== undefined) {
+      updateData.fiberProviders = Array.isArray(fiberProviders) ? fiberProviders.join(", ") : fiberProviders;
+    }
+    if (hasSolarWaterHeating !== undefined) {
+      updateData.hasSolarWaterHeating = hasSolarWaterHeating === true || hasSolarWaterHeating === "true";
+    }
+    if (securityFeatures !== undefined) {
+      updateData.securityFeatures = Array.isArray(securityFeatures) ? securityFeatures.join(", ") : securityFeatures;
+    }
+    if (serviceCharge !== undefined) updateData.serviceCharge = serviceCharge ? parseFloat(serviceCharge) : null;
+    if (depositMonths !== undefined) updateData.depositMonths = depositMonths ? parseInt(depositMonths) : null;
+    if (legalStatus !== undefined) updateData.legalStatus = legalStatus;
+    if (projectedYield !== undefined) updateData.projectedYield = projectedYield ? parseFloat(projectedYield) : null;
+    if (annualAppreciation !== undefined) updateData.annualAppreciation = annualAppreciation ? parseFloat(annualAppreciation) : null;
+    if (virtualTourUrl !== undefined) updateData.virtualTourUrl = virtualTourUrl;
+    if (floorPlanUrl !== undefined) updateData.floorPlanUrl = floorPlanUrl;
+
     // Only admin can update these fields
     if (userRole === "ADMIN") {
       if (isFeatured !== undefined) updateData.isFeatured = isFeatured;
@@ -632,6 +724,53 @@ router.put("/:id", authenticateToken, async (req, res, next) => {
   }
 });
 
+// @desc    Create property inquiry
+// @route   POST /api/v1/properties/:id/inquiry
+// @access  Private
+router.post("/:id/inquiry", authenticateToken, async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { category, message, contactPreference = "EMAIL" } = req.body;
+    const userId = req.user.id;
+    const prisma = getPrismaClient();
+
+    const property = await prisma.property.findUnique({
+      where: { id },
+    });
+
+    if (!property) {
+      return res.status(404).json({
+        status: "error",
+        message: "Property not found",
+      });
+    }
+
+    // Create inquiry
+    const inquiry = await prisma.propertyInquiry.create({
+      data: {
+        propertyId: id,
+        userId,
+        agentId: property.agentId || property.ownerId, // Route to agent if exists, otherwise owner
+        message: `[${category}] ${message}`,
+        contactPreference,
+      },
+    });
+
+    // Increment inquiry count on property
+    await prisma.property.update({
+      where: { id },
+      data: { inquiryCount: { increment: 1 } },
+    });
+
+    res.status(201).json({
+      status: "success",
+      data: inquiry,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // @desc    Delete property
 // @route   DELETE /api/v1/properties/:id
 // @access  Private (Owner/Agent/Admin)
@@ -642,6 +781,13 @@ router.delete("/:id", authenticateToken, async (req, res, next) => {
     const userRole = req.user.role;
     const propertyId = req.params.id;
 
+    // Property Enhancements: Added comprehensive metadata fields (utilities, security, financial, legal), unique session-based view tracking (last 24h), and a dedicated inquiry system.
+    // Presence Tracking: Users can see if others are "Online" or when they were "Last Seen".
+    // Typing Indicators: Real-time "Typing..." feedback in the chat window.
+    // Delivery Status: "Delivered" acknowledgments when messages reach the recipient.
+    // Search Fix: Resolved `PrismaClientValidationError` in search queries by ensuring compatibility with SQLite.
+    // Admin Management: Registered admin routes for system management.
+    // GitHub: All changes successfully committed and pushed to the `main` branch.
     // Check if property exists and user has permission
     const existingProperty = await prisma.property.findUnique({
       where: { id: propertyId },

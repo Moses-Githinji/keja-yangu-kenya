@@ -61,6 +61,7 @@ model User {
   authoredReviews          BookingReview[]       @relation("ReviewAuthor")
   receivedReviews          BookingReview[]       @relation("ReviewRecipient")
 
+  @@index([phone])
   @@map("users")
 }
 
@@ -162,6 +163,30 @@ model Property {
   slug              String                  @unique
   views             Int                     @default(0)
   inquiryCount      Int                     @default(0)
+  geocodedAddress   String?
+  
+  // Utilities & Infrastructure
+  waterSource       String?
+  backupPower       String?
+  fiberProviders    String?                 // Comma-separated list
+  hasSolarWaterHeating Boolean              @default(false)
+  
+  // Security
+  securityFeatures  String?                 // Comma-separated list
+  
+  // Financial & Legal
+  serviceCharge     Float?
+  depositMonths     Int?
+  legalStatus       String?                 // e.g., "Title Deed Ready", "Leasehold"
+  
+  // Investment Info
+  projectedYield    Float?                  // Percentage
+  annualAppreciation Float?                 // Percentage
+  
+  // Media
+  virtualTourUrl    String?
+  floorPlanUrl      String?
+
   createdAt         DateTime                @default(now())
   updatedAt         DateTime                @updatedAt
   listedAt          DateTime                @default(now())
@@ -182,6 +207,7 @@ model Property {
   adRevenue         AdRevenue[]
   shortTermBookings ShortTermBooking[]
   calendar          PropertyCalendar[]
+  propertyViews     PropertyView[]
 
   @@index([ownerId])
   @@index([agentId])
@@ -195,6 +221,19 @@ model Property {
   @@index([createdAt])
   @@index([isPremium])
   @@map("properties")
+}
+
+model PropertyView {
+  id         String   @id @default(cuid())
+  propertyId String
+  sessionId  String
+  createdAt  DateTime @default(now())
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@index([propertyId])
+  @@index([sessionId])
+  @@index([createdAt])
+  @@map("property_views")
 }
 
 model PropertyImage {
