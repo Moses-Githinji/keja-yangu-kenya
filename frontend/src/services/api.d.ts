@@ -77,9 +77,15 @@ const apiService: ApiService = {
     deleteImage: (propertyId, imageId) =>
       api.delete(`/properties/${propertyId}/images/${imageId}`),
 
-    getInquiries: (id) => api.get(`/properties/${id}/inquiries`),
-    createInquiry: (id, inquiryData) =>
-      api.post(`/properties/${id}/inquiries`, inquiryData),
+    getInquiries: (id: string) => api.get(`/properties/${id}/inquiries`),
+    createInquiry: (
+      id: string,
+      inquiryData: {
+        category: "Viewing Request" | "Price Negotiation" | "General Inquiry" | "Legal/Paperwork";
+        message: string;
+        contactPreference: "EMAIL" | "PHONE" | "WHATSAPP";
+      }
+    ) => api.post(`/properties/${id}/inquiry`, inquiryData),
   },
 
   search: {

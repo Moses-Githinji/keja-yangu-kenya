@@ -57,6 +57,40 @@ const AddPropertyModal: React.FC<AddPropertyModalProps> = ({
     longitude: "",
     features: [] as string[],
     amenities: [] as string[],
+    // Infrastructure & Utilities
+    waterSource: "City Council",
+    backupPower: "None",
+    fiberProviders: "",
+    hasSolarWaterHeating: false,
+    // Security
+    securityFeatures: "",
+    // Financial & Legal
+    serviceCharge: "",
+    depositMonths: "2",
+    legalStatus: "Title Deed Ready",
+    // Investment Info
+    projectedYield: "",
+    annualAppreciation: "",
+    // Media
+    virtualTourUrl: "",
+    floorPlanUrl: "",
+    // Brief Stay Specifics
+    checkInTime: "14:00",
+    checkOutTime: "11:00",
+    maxGuests: "",
+    bedCount: "",
+    wifiSpeed: "",
+    cleaningFee: "",
+    serviceFee: "",
+    houseRules: "",
+    selfCheckInMethod: "Lockbox",
+    weekendRate: "",
+    weeklyDiscount: "",
+    hasWifi: true,
+    hasDedicatedWorkspace: false,
+    hasCoffeeMaker: false,
+    isQuietArea: false,
+    toiletriesProvided: true,
   });
 
   const propertyTypes = [
@@ -91,6 +125,11 @@ const AddPropertyModal: React.FC<AddPropertyModalProps> = ({
     "Dryer",
     "Microwave",
     "Oven",
+    "Dedicated Workspace",
+    "Coffee Maker",
+    "Toiletries",
+    "Smart TV",
+    "Kitchenware",
   ];
 
   const handleInputChange = (field: string, value: string) => {
@@ -166,10 +205,45 @@ const AddPropertyModal: React.FC<AddPropertyModalProps> = ({
         city: formData.city,
         county: formData.county,
         address: formData.address,
-        latitude: parseFloat(formData.latitude),
         longitude: parseFloat(formData.longitude),
         features: formData.features,
         amenities: formData.amenities,
+        // Infrastructure & Utilities
+        waterSource: formData.waterSource,
+        backupPower: formData.backupPower,
+        fiberProviders: formData.fiberProviders.split(",").map(p => p.trim()).filter(Boolean),
+        hasSolarWaterHeating: formData.hasSolarWaterHeating,
+        // Security
+        securityFeatures: formData.securityFeatures.split(",").map(s => s.trim()).filter(Boolean),
+        // Financial & Legal
+        serviceCharge: formData.serviceCharge ? parseFloat(formData.serviceCharge) : null,
+        depositMonths: formData.depositMonths ? parseInt(formData.depositMonths) : null,
+        legalStatus: formData.legalStatus,
+        // Investment Info
+        projectedYield: formData.projectedYield ? parseFloat(formData.projectedYield) : null,
+        annualAppreciation: formData.annualAppreciation ? parseFloat(formData.annualAppreciation) : null,
+        // Media
+        virtualTourUrl: formData.virtualTourUrl,
+        floorPlanUrl: formData.floorPlanUrl,
+        // Brief Stay Specifics
+        ...(formData.listingType === "SHORT_TERM_RENT" && {
+          checkInTime: formData.checkInTime,
+          checkOutTime: formData.checkOutTime,
+          maxGuests: formData.maxGuests ? parseInt(formData.maxGuests) : null,
+          bedCount: formData.bedCount ? parseInt(formData.bedCount) : null,
+          wifiSpeed: formData.wifiSpeed ? parseInt(formData.wifiSpeed) : null,
+          cleaningFee: formData.cleaningFee ? parseFloat(formData.cleaningFee) : null,
+          serviceFee: formData.serviceFee ? parseFloat(formData.serviceFee) : null,
+          houseRules: formData.houseRules.split(",").map(r => r.trim()).filter(Boolean),
+          selfCheckInMethod: formData.selfCheckInMethod,
+          weekendRate: formData.weekendRate ? parseFloat(formData.weekendRate) : null,
+          weeklyDiscount: formData.weeklyDiscount ? parseFloat(formData.weeklyDiscount) : null,
+          hasWifi: formData.hasWifi,
+          hasDedicatedWorkspace: formData.hasDedicatedWorkspace,
+          hasCoffeeMaker: formData.hasCoffeeMaker,
+          isQuietArea: formData.isQuietArea,
+          toiletriesProvided: formData.toiletriesProvided,
+        }),
         slug: formData.title
           .toLowerCase()
           .replace(/[^a-z0-9]+/g, "-")
@@ -247,6 +321,34 @@ const AddPropertyModal: React.FC<AddPropertyModalProps> = ({
       longitude: "",
       features: [],
       amenities: [],
+      waterSource: "City Council",
+      backupPower: "None",
+      fiberProviders: "",
+      hasSolarWaterHeating: false,
+      securityFeatures: "",
+      serviceCharge: "",
+      depositMonths: "2",
+      legalStatus: "Title Deed Ready",
+      projectedYield: "",
+      annualAppreciation: "",
+      virtualTourUrl: "",
+      floorPlanUrl: "",
+      checkInTime: "14:00",
+      checkOutTime: "11:00",
+      maxGuests: "",
+      bedCount: "",
+      wifiSpeed: "",
+      cleaningFee: "",
+      serviceFee: "",
+      houseRules: "",
+      selfCheckInMethod: "Lockbox",
+      weekendRate: "",
+      weeklyDiscount: "",
+      hasWifi: true,
+      hasDedicatedWorkspace: false,
+      hasCoffeeMaker: false,
+      isQuietArea: false,
+      toiletriesProvided: true,
     });
     setImages([]);
   };
@@ -481,6 +583,376 @@ const AddPropertyModal: React.FC<AddPropertyModalProps> = ({
                       required
                     />
                   </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Infrastructure & Security */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Infrastructure & Security</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  <div className="space-y-2">
+                    <Label htmlFor="waterSource">Water Source</Label>
+                    <Select
+                      value={formData.waterSource}
+                      onValueChange={(v) => handleInputChange("waterSource", v)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select water source" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="City Council">City Council</SelectItem>
+                        <SelectItem value="Borehole">Borehole</SelectItem>
+                        <SelectItem value="Borehole & City Council">Both</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="backupPower">Backup Power</Label>
+                    <Select
+                      value={formData.backupPower}
+                      onValueChange={(v) => handleInputChange("backupPower", v)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select backup power" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="None">None</SelectItem>
+                        <SelectItem value="Inverter">Inverter</SelectItem>
+                        <SelectItem value="Solar">Solar</SelectItem>
+                        <SelectItem value="Full Backup Generator">Full Generator</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="hasSolarWaterHeating"
+                    checked={formData.hasSolarWaterHeating}
+                    onCheckedChange={(checked) => 
+                      setFormData(prev => ({ ...prev, hasSolarWaterHeating: !!checked }))
+                    }
+                  />
+                  <Label htmlFor="hasSolarWaterHeating" className="cursor-pointer">
+                    Has Solar Water Heating
+                  </Label>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="fiberProviders">Fiber Internet Providers</Label>
+                  <Input
+                    id="fiberProviders"
+                    value={formData.fiberProviders}
+                    onChange={(e) => handleInputChange("fiberProviders", e.target.value)}
+                    placeholder="e.g. Safaricom, Zuku, Liquid (comma separated)"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="securityFeatures">Security Features</Label>
+                  <Input
+                    id="securityFeatures"
+                    value={formData.securityFeatures}
+                    onChange={(e) => handleInputChange("securityFeatures", e.target.value)}
+                    placeholder="e.g. CCTV, 24/7 Guarded, Electric Fence (comma separated)"
+                  />
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Financial & Legal Details */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Financial & Legal Details</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  <div className="space-y-2">
+                    <Label htmlFor="serviceCharge">Monthly Service Charge (KES)</Label>
+                    <Input
+                      id="serviceCharge"
+                      type="number"
+                      value={formData.serviceCharge}
+                      onChange={(e) => handleInputChange("serviceCharge", e.target.value)}
+                      placeholder="e.g. 15000"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="depositMonths">Deposit (Months)</Label>
+                    <Input
+                      id="depositMonths"
+                      type="number"
+                      value={formData.depositMonths}
+                      onChange={(e) => handleInputChange("depositMonths", e.target.value)}
+                      placeholder="e.g. 2"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="legalStatus">Legal Status</Label>
+                  <Select
+                    value={formData.legalStatus}
+                    onValueChange={(v) => handleInputChange("legalStatus", v)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Title Deed Ready">Title Deed Ready</SelectItem>
+                      <SelectItem value="Leasehold">Leasehold (99 years)</SelectItem>
+                      <SelectItem value="Sectional Title">Sectional Title</SelectItem>
+                      <SelectItem value="Under Mutation">Under Mutation</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Investment Insights (Conditional) */}
+                {(formData.listingType === "SALE" || formData.listingType === "RENT") && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-2 border-t">
+                    <div className="space-y-2">
+                      <Label htmlFor="projectedYield">Projected Rental Yield (%)</Label>
+                      <Input
+                        id="projectedYield"
+                        type="number"
+                        step="0.1"
+                        value={formData.projectedYield}
+                        onChange={(e) => handleInputChange("projectedYield", e.target.value)}
+                        placeholder="e.g. 8.5"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="annualAppreciation">Annual Appreciation (%)</Label>
+                      <Input
+                        id="annualAppreciation"
+                        type="number"
+                        step="0.1"
+                        value={formData.annualAppreciation}
+                        onChange={(e) => handleInputChange("annualAppreciation", e.target.value)}
+                        placeholder="e.g. 12.0"
+                      />
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Stay Guidelines (Brief Stay Only) */}
+            {formData.listingType === "SHORT_TERM_RENT" && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Stay Guidelines & Costs</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <div className="space-y-2">
+                      <Label htmlFor="checkInTime">Check-in Time</Label>
+                      <Input
+                        id="checkInTime"
+                        type="time"
+                        value={formData.checkInTime}
+                        onChange={(e) => handleInputChange("checkInTime", e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="checkOutTime">Check-out Time</Label>
+                      <Input
+                        id="checkOutTime"
+                        type="time"
+                        value={formData.checkOutTime}
+                        onChange={(e) => handleInputChange("checkOutTime", e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                    <div className="space-y-2">
+                      <Label htmlFor="maxGuests">Max Guests</Label>
+                      <Input
+                        id="maxGuests"
+                        type="number"
+                        value={formData.maxGuests}
+                        onChange={(e) => handleInputChange("maxGuests", e.target.value)}
+                        placeholder="e.g. 6"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="bedCount">Number of Beds</Label>
+                      <Input
+                        id="bedCount"
+                        type="number"
+                        value={formData.bedCount}
+                        onChange={(e) => handleInputChange("bedCount", e.target.value)}
+                        placeholder="e.g. 3"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="wifiSpeed">WiFi Speed (Mbps)</Label>
+                      <Input
+                        id="wifiSpeed"
+                        type="number"
+                        value={formData.wifiSpeed}
+                        onChange={(e) => handleInputChange("wifiSpeed", e.target.value)}
+                        placeholder="e.g. 50"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <div className="space-y-2">
+                       <Label htmlFor="cleaningFee">Cleaning Fee (KES)</Label>
+                       <Input
+                         id="cleaningFee"
+                         type="number"
+                         value={formData.cleaningFee}
+                         onChange={(e) => handleInputChange("cleaningFee", e.target.value)}
+                         placeholder="e.g. 1500"
+                       />
+                    </div>
+                    <div className="space-y-2">
+                       <Label htmlFor="serviceFee">Service/Admin Fee (KES)</Label>
+                       <Input
+                         id="serviceFee"
+                         type="number"
+                         value={formData.serviceFee}
+                         onChange={(e) => handleInputChange("serviceFee", e.target.value)}
+                         placeholder="e.g. 500"
+                       />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <div className="space-y-2">
+                      <Label htmlFor="weekendRate">Weekend Night Rate (KES)</Label>
+                      <Input
+                        id="weekendRate"
+                        type="number"
+                        value={formData.weekendRate}
+                        onChange={(e) => handleInputChange("weekendRate", e.target.value)}
+                        placeholder="e.g. 8500 (Optional)"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="weeklyDiscount">Weekly Stay Discount (%)</Label>
+                      <Input
+                        id="weeklyDiscount"
+                        type="number"
+                        value={formData.weeklyDiscount}
+                        onChange={(e) => handleInputChange("weeklyDiscount", e.target.value)}
+                        placeholder="e.g. 10"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="selfCheckInMethod">Self Check-in Method</Label>
+                    <Select
+                      value={formData.selfCheckInMethod}
+                      onValueChange={(v) => handleInputChange("selfCheckInMethod", v)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select method" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Lockbox">Lockbox</SelectItem>
+                        <SelectItem value="Smart Lock">Smart Lock</SelectItem>
+                        <SelectItem value="Keypad">Keypad</SelectItem>
+                        <SelectItem value="Reception/Staff">Reception/Staff</SelectItem>
+                        <SelectItem value="Meet & Greet">Meet & Greet</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-4">
+                    <Label>Hospitality Specifics</Label>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="hasWifi"
+                          checked={formData.hasWifi}
+                          onCheckedChange={(checked) => setFormData(prev => ({ ...prev, hasWifi: !!checked }))}
+                        />
+                        <Label htmlFor="hasWifi" className="text-sm cursor-pointer">High speed WiFi</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="hasDedicatedWorkspace"
+                          checked={formData.hasDedicatedWorkspace}
+                          onCheckedChange={(checked) => setFormData(prev => ({ ...prev, hasDedicatedWorkspace: !!checked }))}
+                        />
+                        <Label htmlFor="hasDedicatedWorkspace" className="text-sm cursor-pointer">Dedicated Workspace</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="hasCoffeeMaker"
+                          checked={formData.hasCoffeeMaker}
+                          onCheckedChange={(checked) => setFormData(prev => ({ ...prev, hasCoffeeMaker: !!checked }))}
+                        />
+                        <Label htmlFor="hasCoffeeMaker" className="text-sm cursor-pointer">Coffee Maker</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="isQuietArea"
+                          checked={formData.isQuietArea}
+                          onCheckedChange={(checked) => setFormData(prev => ({ ...prev, isQuietArea: !!checked }))}
+                        />
+                        <Label htmlFor="isQuietArea" className="text-sm cursor-pointer">Quiet Environment</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="toiletriesProvided"
+                          checked={formData.toiletriesProvided}
+                          onCheckedChange={(checked) => setFormData(prev => ({ ...prev, toiletriesProvided: !!checked }))}
+                        />
+                        <Label htmlFor="toiletriesProvided" className="text-sm cursor-pointer">Toiletries Provided</Label>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="houseRules">House Rules</Label>
+                    <Textarea
+                      id="houseRules"
+                      value={formData.houseRules}
+                      onChange={(e) => handleInputChange("houseRules", e.target.value)}
+                      placeholder="Enter house rules (comma separated, e.g. No smoking, No parties, No pets)"
+                      rows={3}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Advanced Media Links */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Advanced Media Links</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="virtualTourUrl">Virtual Tour URL (Matterport / 360)</Label>
+                  <Input
+                    id="virtualTourUrl"
+                    value={formData.virtualTourUrl}
+                    onChange={(e) => handleInputChange("virtualTourUrl", e.target.value)}
+                    placeholder="https://my.matterport.com/show/..."
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="floorPlanUrl">Floor Plan Image/PDF URL</Label>
+                  <Input
+                    id="floorPlanUrl"
+                    value={formData.floorPlanUrl}
+                    onChange={(e) => handleInputChange("floorPlanUrl", e.target.value)}
+                    placeholder="https://..."
+                  />
                 </div>
               </CardContent>
             </Card>
