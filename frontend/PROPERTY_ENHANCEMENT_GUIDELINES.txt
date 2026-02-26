@@ -1,0 +1,70 @@
+# Property Enhancements: Frontend Integration Guidelines
+
+This document provides technical details for integrating the new property metadata and tracking features.
+
+## 1. New Property Metadata Fields
+
+The `Property` object returned by `GET /properties` and `GET /properties/:id` now contains additional fields.
+
+### Infrastructure & Utilities
+- `waterSource`: (String) e.g., "City Council", "Borehole"
+- `backupPower`: (String) e.g., "Full Generator", "Solar"
+- `fiberProviders`: (String) Comma-separated list (e.g., "Safaricom, Zuku")
+- `hasSolarWaterHeating`: (Boolean)
+
+### Security
+- `securityFeatures`: (String) Comma-separated list (e.g., "CCTV, 24/7 Guarded")
+
+### Financial & Legal
+- `serviceCharge`: (Float) Monthly amount in KES
+- `depositMonths`: (Int) Number of months required as deposit
+- `legalStatus`: (String) e.g., "Title Deed Ready", "Leasehold"
+
+### Investment Info
+- `projectedYield`: (Float) Percentage (e.g., 8.5)
+- `annualAppreciation`: (Float) Percentage (e.g., 5.0)
+
+### Media (Support for richer content)
+- `virtualTourUrl`: (String) Matterport or 360-degree tour link
+- `floorPlanUrl`: (String) URL to floor plan image or PDF
+
+---
+
+## 2. Updated Endpoints
+
+### Detail View: `GET /api/v1/properties/:id`
+**New behavior**:
+- Unique session tracking: The backend now tracks views per session (IP or User ID) over a 24-hour window.
+- **New Field**: `viewCount24h` (Number) - The number of unique visitors in the last 24 hours.
+- Use `data.viewCount` for total lifetime views and `data.viewCount24h` for current popularity.
+
+### Property Creation/Update: `POST` and `PUT`
+Handle the new fields in your forms.
+- For `fiberProviders` and `securityFeatures`, you can send either a comma-separated string OR an array of strings (the backend will handle the conversion).
+- Boolean fields like `hasSolarWaterHeating` can be sent as `true`/`false` or strings `"true"`/`"false"`.
+
+---
+
+## 3. New Inquiry System: `POST /api/v1/properties/:id/inquiry`
+
+Use this endpoint for categorized property inquiries.
+
+**Request Body**:
+```json
+{
+  "category": "Viewing Request",
+  "message": "I would like to schedule a viewing for next Saturday.",
+  "contactPreference": "PHONE" 
+}
+```
+**Categories**: Recommended to use "Viewing Request", "Price Negotiation", "General Inquiry", "Legal/Paperwork".
+**Contact Preferences**: "EMAIL", "PHONE", "WHATSAPP".
+
+---
+
+## 4. Implementation Best Practices
+
+1. **Format Comma Strings**: When displaying `fiberProviders` or `securityFeatures`, split by comma:
+   `property.securityFeatures.split(',').map(f => f.trim())`
+2. **Handle Nulls**: Many of these fields are optional (`null`). Use optional chaining or defaults.
+3. **Display Yield**: Format `projectedYield` and `annualAppreciation` as percentages (e.g., `8.5%`).

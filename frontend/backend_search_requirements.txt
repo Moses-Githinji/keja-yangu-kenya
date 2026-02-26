@@ -1,0 +1,39 @@
+# Backend API Search Query Parameter Requirements
+
+## 1. Search Endpoint
+- **URL**: /api/v1/search
+- **Method**: GET
+- **Access**: Public
+
+## 2. Parameter Keys and Mapping
+| Feature | Parameter Key | Mapping / Logic |
+| :--- | :--- | :--- |
+| **Keyword Search** | q | Partial matches on title, description, address, city, county, and neighborhood. |
+| **Listing Type** | listingType | Expects SALE, RENT, or SHORT_TERM_RENT. |
+| **Property Type** | propertyType | APARTMENT, HOUSE, VILLA, LAND, COMMERCIAL, etc. |
+| **Location (City)** | city | Specific partial match on city field. |
+| **Location (County)** | county | Specific partial match on county field. |
+| **Price Range** | minPrice, maxPrice | Numeric values (floats/decimals). |
+| **Bedrooms** | minBedrooms, maxBedrooms | Integer values. |
+| **Bathrooms** | minBathrooms, maxBathrooms | Integer values. |
+| **Area Size** | minArea, maxArea | Numeric values (mapped to areaSize in database). |
+| **Features** | features | Comma-separated string (e.g., ?features=Wifi,Parking). |
+
+## 3. Formatting and Enums
+- **Enums**: values like SALE, APARTMENT, etc., are handled case-insensitively by the backend (transformed to uppercase). SCREAMING_SNAKE_CASE is the standard.
+- **Numeric Values**: Should be sent as raw numbers/strings (e.g., 5000000).
+- **Booleans**: Use strings "true" or "false" (e.g., isVerified=true).
+
+## 4. Pagination and Sorting
+- **page**: page (Default: 1)
+- **limit**: limit (Default: 10)
+- **sortBy**: sortBy (Default: createdAt). Supported: price, bedrooms, bathrooms, areaSize, yearBuilt.
+- **order**: order (asc or desc)
+
+## 5. URL Structure Preference
+The backend expects explicit/flat parameters.
+Example: /api/v1/search?listingType=SALE&city=Nairobi&minPrice=10000000
+
+## 6. Autocomplete / Suggestions
+- **URL**: /api/v1/search/suggestions?q={input}&type={all|cities|counties|properties}
+- Use this for real-time suggestions in the search widget.

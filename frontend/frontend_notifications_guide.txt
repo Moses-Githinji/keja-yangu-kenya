@@ -1,0 +1,76 @@
+# KejaYangu Frontend Notification Implementation Guide
+
+This guide describes how to integrate the backend notification system into the React frontend.
+
+## 1. API Endpoints
+
+The following updated endpoints are available in `notifications.js`:
+
+- `GET /api/v1/notifications`: Fetch all notifications (paginated).
+  - Query params: `page`, `limit`, `type`, `status` ("READ" or "UNREAD").
+- `GET /api/v1/notifications/unread-count`: Get the total count of unread notifications.
+- `PUT /api/v1/notifications/:id/read`: Mark a single notification as read.
+- `PUT /api/v1/notifications/read-all`: Mark all as read.
+- `DELETE /api/v1/notifications/:id`: Delete a notification.
+- `GET /api/v1/notifications/unread-count`: Get the total count of unread notifications.
+- `GET /api/v1/chat`: Returns an array of conversations. Each object now includes an `unreadCount` field (integer).
+
+## 2. Notification Model Structure
+
+Each notification object contains:
+- `id`: String
+- `title`: String ("New Message", etc.)
+- `message`: String
+- `type`: "SYSTEM" (Chat notifications use this)
+- `status`: "READ" | "UNREAD"
+- `metadata`: JSON String. For chat messages, it looks like:
+  ```json
+  {
+    "chatId": "...",
+    "messageId": "...",
+    "senderId": "...",
+    "type": "CHAT_MESSAGE"
+  }
+  ```
+- `createdAt`: ISO Date String
+
+## 3. Real-time Implementation (Socket.IO)
+
+The backend uses Socket.IO for real-time updates.
+
+### Connection
+Connect to the socket server using the `accessToken`:
+```javascript
+const socket = io(SERVER_URL, {
+  auth: { token: accessToken }
+});
+```
+
+### Event Listeners
+1. **`new-notification`**: Emitted to a specific user (`user-${userId}`) when they receive any notification.
+   ```javascript
+   socket.on("new-notification", (notification) => {
+     // notification object follows the structure in section 2
+     console.log("New system notification received:", notification);
+   });
+   ```
+2. **`new-message`**: Emitted to a conversation room (`conversation-${chatId}`) when a new message is posted.
+   ```javascript
+   socket.on("new-message", (data) => {
+     // data.message contains the message object
+     console.log("New chat message:", data.message);
+   });
+   ```
+
+### Joining Rooms
+To receive message events for a specific chat, join its room:
+```javascript
+socket.emit("join-conversation", chatId);
+```
+
+## 4. Navigation from Notifications
+
+When a user clicks a notification:
+1. Parse the `metadata` string.
+2. If `type === "CHAT_MESSAGE"`, navigate to `/chat/${chatId}`.
+3. Call the `PUT /notifications/${id}/read` endpoint to clear the alert.

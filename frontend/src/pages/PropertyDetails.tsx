@@ -29,6 +29,21 @@ import PropertyMap from "@/components/map/PropertyMap";
 import ChatInterface from "@/components/chat/ChatInterface";
 import ImageCarousel from "@/components/ImageCarousel";
 import property1 from "@/assets/property-1.jpg";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Calendar as CalendarComponent } from "@/components/ui/calendar";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import { format, differenceInDays } from "date-fns";
 
 // Types
 import type {
@@ -55,6 +70,11 @@ const PropertyDetails = () => {
   const [isCarouselOpen, setIsCarouselOpen] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [similarProperties, setSimilarProperties] = useState<Property[]>([]);
+
+  // Short-term rent specific state
+  const [checkIn, setCheckIn] = useState<Date>();
+  const [checkOut, setCheckOut] = useState<Date>();
+  const [guests, setGuests] = useState(1);
 
   // Carousel functions
   const openCarousel = (index: number) => {
@@ -105,6 +125,19 @@ const PropertyDetails = () => {
       setIsLoadingSimilar(false);
     }
   };
+
+  // Calculate total nights and trip costs
+  const isShortTerm = property?.listingType === "SHORT_TERM_RENT";
+  const numNights =
+    checkIn && checkOut && differenceInDays(checkOut, checkIn) > 0
+      ? differenceInDays(checkOut, checkIn)
+      : 0;
+
+  const nightlyRate = property?.price || 0;
+  const accommodationCost = numNights * nightlyRate;
+  const cleaningFee = 2000; // Fixed cleaning fee for now
+  const serviceFee = Math.round(accommodationCost * 0.03); // 3% service fee
+  const totalCost = accommodationCost + cleaningFee + serviceFee;
 
   useEffect(() => {
     const fetchProperty = async () => {
@@ -356,10 +389,14 @@ const PropertyDetails = () => {
                 <span className="text-3xl font-bold">
                   {property.formattedPrice}
                 </span>
-                {property.rentPeriod && (
-                  <span className="text-muted-foreground">
-                    / {property.rentPeriod}
-                  </span>
+                {isShortTerm ? (
+                  <span className="text-muted-foreground">/ night</span>
+                ) : (
+                  property.rentPeriod && (
+                    <span className="text-muted-foreground">
+                      / {property.rentPeriod}
+                    </span>
+                  )
                 )}
               </div>
 
@@ -508,11 +545,11 @@ const PropertyDetails = () => {
 
           {/* Sidebar */}
           <div className="space-y-6">
-            {/* Contact Agent */}
+            {/* Contact Host / Agent */}
             {property.agent && (
               <Card>
                 <CardHeader>
-                  <CardTitle>Contact Agent</CardTitle>
+                  <CardTitle>{isShortTerm ? "Contact Host" : "Contact Agent"}</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="flex items-center space-x-4">
@@ -520,7 +557,7 @@ const PropertyDetails = () => {
                       {property.agent.avatar ? (
                         <img
                           src={property.agent.avatar}
-                          alt={property.agent.name || "Agent"}
+                          alt={property.agent.name || (isShortTerm ? "Host" : "Agent")}
                           className="h-full w-full rounded-full object-cover"
                         />
                       ) : (
@@ -528,13 +565,13 @@ const PropertyDetails = () => {
                           {property.agent.name
                             ?.split(" ")
                             .map((n) => n[0])
-                            .join("") || "A"}
+                            .join("") || (isShortTerm ? "H" : "A")}
                         </span>
                       )}
                     </div>
                     <div>
                       <h3 className="font-semibold">
-                        {property.agent.name || "Agent"}
+                        {property.agent.name || (isShortTerm ? "Host" : "Agent")}
                       </h3>
                       {property.agent.company && (
                         <p className="text-sm text-muted-foreground">
@@ -550,7 +587,7 @@ const PropertyDetails = () => {
                       onClick={() => setIsChatOpen(true)}
                     >
                       <MessageCircle className="h-4 w-4 mr-2" />
-                      Chat with Agent
+                      Chat with {isShortTerm ? "Host" : "Agent"}
                     </Button>
                     {property.agent.phone && (
                       <Button asChild variant="outline" className="w-full">
@@ -565,15 +602,129 @@ const PropertyDetails = () => {
               </Card>
             )}
 
-            {/* Schedule a Viewing */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Schedule a Viewing</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Button className="w-full">Book a Viewing</Button>
-              </CardContent>
-            </Card>
+            {/* Trip Calculator for SHORT_TERM_RENT */}
+            {isShortTerm ? (
+              <Card className="sticky top-24">
+                <CardHeader>
+                  <CardTitle>Trip Calculator</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Check-in</Label>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              className={`w-full justify-start text-left font-normal ${
+                                !checkIn && "text-muted-foreground"
+                              }`}
+                            >
+                              <Calendar className="mr-2 h-4 w-4" />
+                              {checkIn ? format(checkIn, "MMM dd") : "Add date"}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0">
+                            <CalendarComponent
+                              mode="single"
+                              selected={checkIn}
+                              onSelect={setCheckIn}
+                              disabled={(date) => date < new Date()}
+                              initialFocus
+                            />
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Check-out</Label>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              className={`w-full justify-start text-left font-normal ${
+                                !checkOut && "text-muted-foreground"
+                              }`}
+                            >
+                              <Calendar className="mr-2 h-4 w-4" />
+                              {checkOut ? format(checkOut, "MMM dd") : "Add date"}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0">
+                            <CalendarComponent
+                              mode="single"
+                              selected={checkOut}
+                              onSelect={setCheckOut}
+                              disabled={(date) => !checkIn || date <= checkIn}
+                              initialFocus
+                            />
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Guests</Label>
+                      <Select
+                        value={guests.toString()}
+                        onValueChange={(value) => setGuests(parseInt(value))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {[1, 2, 3, 4, 5, 6].map((num) => (
+                            <SelectItem key={num} value={num.toString()}>
+                              {num} {num === 1 ? "Guest" : "Guests"}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  {numNights > 0 && (
+                    <div className="space-y-3 pt-4 border-t text-sm">
+                      <div className="flex justify-between">
+                        <span>
+                          KSh {nightlyRate.toLocaleString()} x {numNights} nights
+                        </span>
+                        <span>KSh {accommodationCost.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Cleaning fee</span>
+                        <span>KSh {cleaningFee.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Service fee</span>
+                        <span>KSh {serviceFee.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between pt-3 border-t font-bold text-base">
+                        <span>Total span</span>
+                        <span>KSh {totalCost.toLocaleString()}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  <Button className="w-full bg-primary hover:bg-primary/90" size="lg">
+                    {numNights > 0 ? "Book Now" : "Check Availability"}
+                  </Button>
+                  
+                  <p className="text-center text-xs text-muted-foreground">
+                    You won't be charged yet
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Schedule a Viewing</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <Button className="w-full">Book a Viewing</Button>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Property Facts */}
             <Card>
@@ -696,7 +847,9 @@ const PropertyDetails = () => {
                         images: property.images || [],
                         address: property.address,
                         city: property.city,
+                        listingType: property.listingType,
                         propertyType: property.propertyType,
+                        slug: property.slug,
                         longitude: property.longitude,
                         latitude: property.latitude,
                       },
