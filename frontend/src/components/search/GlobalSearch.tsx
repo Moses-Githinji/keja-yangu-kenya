@@ -98,7 +98,7 @@ export const GlobalSearch = ({ isOpen, onClose }: GlobalSearchProps) => {
         title: "Houses",
         subtitle: "Search for houses",
         icon: <Home className="h-4 w-4" />,
-        action: () => navigate(`/buy?propertyType=HOUSE&q=${searchQuery}`),
+        action: () => navigate(`/buy?listingType=SALE&propertyType=HOUSE&q=${searchQuery}`),
       });
     }
 
@@ -109,7 +109,7 @@ export const GlobalSearch = ({ isOpen, onClose }: GlobalSearchProps) => {
         title: "Apartments",
         subtitle: "Search for apartments",
         icon: <Building className="h-4 w-4" />,
-        action: () => navigate(`/buy?propertyType=APARTMENT&q=${searchQuery}`),
+        action: () => navigate(`/buy?listingType=SALE&propertyType=APARTMENT&q=${searchQuery}`),
       });
     }
 
@@ -125,7 +125,7 @@ export const GlobalSearch = ({ isOpen, onClose }: GlobalSearchProps) => {
         title: "Nairobi",
         subtitle: "Properties in Nairobi",
         icon: <MapPin className="h-4 w-4" />,
-        action: () => navigate(`/buy?city=Nairobi&q=${searchQuery}`),
+        action: () => navigate(`/buy?listingType=SALE&city=Nairobi&q=${searchQuery}`),
       });
     }
 
@@ -140,7 +140,7 @@ export const GlobalSearch = ({ isOpen, onClose }: GlobalSearchProps) => {
         title: "Mombasa",
         subtitle: "Properties in Mombasa",
         icon: <MapPin className="h-4 w-4" />,
-        action: () => navigate(`/buy?city=Mombasa&q=${searchQuery}`),
+        action: () => navigate(`/buy?listingType=SALE&city=Mombasa&q=${searchQuery}`),
       });
     }
 
@@ -152,17 +152,17 @@ export const GlobalSearch = ({ isOpen, onClose }: GlobalSearchProps) => {
         title: `Search for "${searchQuery}"`,
         subtitle: "Search all properties",
         icon: <Search className="h-4 w-4" />,
-        action: () => navigate(`/buy?q=${searchQuery}`),
+        action: () => navigate(`/buy?listingType=SALE&q=${searchQuery}`),
       });
     }
-
+ 
     setSuggestions(newSuggestions);
   };
-
+ 
   // Handle search submission
   const handleSearch = (searchQuery?: string) => {
     const finalQuery = searchQuery || query;
-
+ 
     if (finalQuery.trim()) {
       // Save to recent searches
       const updated = [
@@ -171,9 +171,9 @@ export const GlobalSearch = ({ isOpen, onClose }: GlobalSearchProps) => {
       ].slice(0, 5);
       setRecentSearches(updated);
       localStorage.setItem("recentSearches", JSON.stringify(updated));
-
+ 
       // Navigate to search results
-      navigate(`/buy?q=${encodeURIComponent(finalQuery)}`);
+      navigate(`/buy?listingType=SALE&q=${encodeURIComponent(finalQuery)}`);
       onClose();
     }
   };

@@ -62,9 +62,16 @@ const PropertyMap = ({
   const [selectedProperty, setSelectedProperty] = useState<any>(null);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
+  // Constants
+  const STYLE_URLS = {
+    light: "mapbox://styles/mapbox/light-v11",
+    dark: "mapbox://styles/mapbox/dark-v11",
+    satellite: "mapbox://styles/mapbox/satellite-v9",
+  };
+
   // Function to create markers
-  const createMarkers = () => {
-    if (!map.current || !map.current.isStyleLoaded()) return;
+  const updateMarkers = React.useCallback(() => {
+    if (!map.current || !isMapLoaded) return;
 
     // Clear existing markers
     markersRef.current.forEach((marker) => marker.remove());
@@ -76,105 +83,86 @@ const PropertyMap = ({
 
       // Create custom marker element
       const markerElement = document.createElement("div");
-      markerElement.className = "custom-marker";
+      markerElement.className = `custom-marker ${isSelected ? "z-10" : "z-0"}`;
       markerElement.innerHTML = `
         <div class="relative">
-          <div class="w-6 h-6 rounded-full border-2 border-white shadow-lg 
-                      flex items-center justify-center ${
-                        isSelected ? "bg-blue-500 scale-125" : "bg-green-500"
+          <div class="w-7 h-7 rounded-full border-2 border-white shadow-xl 
+                      flex items-center justify-center transition-all duration-300 ${
+                        isSelected ? "bg-primary scale-125 ring-4 ring-primary/20" : "bg-green-600 hover:scale-110"
                       }">
             <div class="w-2 h-2 bg-white rounded-full"></div>
           </div>
-          ${
-            isSelected
-              ? '<div class="absolute -top-1 -right-1 w-3 h-3 bg-blue-500 rounded-full border-2 border-white"></div>'
-              : ""
-          }
         </div>
       `;
+
+      const lng = Number(property.longitude);
+      const lat = Number(property.latitude);
+
+      if (isNaN(lng) || isNaN(lat)) return;
 
       const marker = new mapboxgl.Marker({
         element: markerElement,
         anchor: "bottom",
       })
-        .setLngLat([
-          Number(property.longitude) || 0,
-          Number(property.latitude) || 0
-        ])
+        .setLngLat([lng, lat])
         .addTo(map.current!);
 
-      // Store marker reference for later manipulation
+      // Store marker reference
       markersRef.current.set(property.id, marker);
 
       // Add click event to marker
       marker.getElement().addEventListener("click", () => {
-        setSelectedProperty(property);
-        setCurrentImageIndex(0);
-
-        // Remove existing popup
-        if (popupRef.current) {
-          popupRef.current.remove();
-        }
-
-        // Create and show Mapbox popup with dynamic positioning
-        const popupContent = createPopupContent(property);
-        const { anchor, offset } = calculateOptimalPopupPosition(property);
-
-        popupRef.current = new mapboxgl.Popup({
-          closeButton: true,
-          closeOnClick: false,
-          maxWidth: "220px",
-          offset: offset,
-          className: "custom-popup",
-          anchor: anchor,
-        })
-          .setLngLat([property.longitude, property.latitude])
-          .setDOMContent(popupContent)
-          .addTo(map.current!);
-
-        if (onPinClick) {
-          onPinClick(property.id);
-        }
+        handlePropertySelection(property);
       });
     });
+  }, [properties, selectedPropertyId, isMapLoaded]);
 
-    // Fit map to bounds of markers
-    if (properties.length > 0 && map.current) {
-      const bounds = new mapboxgl.LngLatBounds();
-      let hasValidCoords = false;
+  const handlePropertySelection = (property: any) => {
+    setSelectedProperty(property);
+    setCurrentImageIndex(0);
 
-      properties.forEach((property) => {
-        const lng = Number(property.longitude);
-        const lat = Number(property.latitude);
-        
-        // Basic coordinate validation
-        if (!isNaN(lng) && !isNaN(lat) && lng !== 0 && lat !== 0) {
-          bounds.extend([lng, lat]);
-          hasValidCoords = true;
-        }
-      });
-
-      if (hasValidCoords) {
-        map.current.fitBounds(bounds, {
-          padding: 50,
-          maxZoom: 15,
-          duration: 1000
-        });
-      }
+    if (onPinClick) {
+      onPinClick(property.id);
     }
+
+    // Center map on the selected property smoothly
+    if (map.current) {
+      map.current.easeTo({
+        center: [property.longitude, property.latitude],
+        zoom: Math.max(map.current.getZoom(), 14),
+        duration: 800,
+        offset: [0, -50], // Slightly offset to account for the popup height
+      });
+    }
+
+    // Show popup
+    showPopup(property);
+  };
+
+  const showPopup = (property: any) => {
+    // Remove existing popup
+    if (popupRef.current) {
+      popupRef.current.remove();
+    }
+
+    const { anchor, offset } = calculateOptimalPopupPosition(property);
+    popupRef.current = new mapboxgl.Popup({
+      closeButton: true,
+      closeOnClick: false,
+      maxWidth: "240px",
+      offset: offset,
+      className: "custom-popup",
+      anchor: anchor,
+    })
+      .setLngLat([property.longitude, property.latitude])
+      .setDOMContent(createPopupContent(property, 0))
+      .addTo(map.current!);
   };
 
   // Function to change map style
   const changeMapStyle = (style: "light" | "dark" | "satellite") => {
     if (!map.current) return;
-
-    const styleUrls = {
-      light: "mapbox://styles/mapbox/light-v11",
-      dark: "mapbox://styles/mapbox/dark-v11",
-      satellite: "mapbox://styles/mapbox/satellite-v9",
-    };
-
-    map.current.setStyle(styleUrls[style]);
+    map.current.setStyle(STYLE_URLS[style]);
     setMapStyle(style);
   };
 
@@ -263,70 +251,87 @@ const PropertyMap = ({
   };
 
   // Create popup content
-  const createPopupContent = (property: any) => {
+  const createPopupContent = (property: any, imageIndex: number) => {
     const popupDiv = document.createElement("div");
-    popupDiv.className = "p-0";
+    popupDiv.className = "flex flex-col w-[220px]";
 
     // Image Carousel
     if (property.images && property.images.length > 0) {
       const carouselDiv = document.createElement("div");
-      carouselDiv.className = "relative";
+      carouselDiv.className = "relative group";
 
       const img = document.createElement("img");
-      img.src = getImageUrl(property.images[currentImageIndex]);
-      img.alt = `${property.title} - Image ${currentImageIndex + 1}`;
+      const imageUrl = getImageUrl(property.images[imageIndex]);
+      img.src = imageUrl;
+      img.alt = `${property.title} - Image ${imageIndex + 1}`;
       img.className = "w-full h-32 object-cover rounded-t-lg";
-
       carouselDiv.appendChild(img);
 
-      // Carousel Navigation (if multiple images)
+      // Carousel Navigation Arrows
       if (property.images.length > 1) {
-        const navDiv = document.createElement("div");
-        navDiv.className =
-          "absolute bottom-2 left-1/2 transform -translate-x-1/2 flex space-x-1";
+        // Prev Button
+        const prevBtn = document.createElement("button");
+        prevBtn.className = "absolute left-1 top-1/2 -translate-y-1/2 bg-white/80 hover:bg-white rounded-full p-1 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity";
+        prevBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>`;
+        prevBtn.onclick = (e) => {
+          e.stopPropagation();
+          const nextIdx = imageIndex === 0 ? property.images.length - 1 : imageIndex - 1;
+          setCurrentImageIndex(nextIdx);
+          if (popupRef.current) {
+            popupRef.current.setDOMContent(createPopupContent(property, nextIdx));
+          }
+        };
+        carouselDiv.appendChild(prevBtn);
 
-        property.images.forEach((_, index) => {
-          const dot = document.createElement("button");
-          dot.className = `w-2 h-2 rounded-full transition-colors ${
-            index === currentImageIndex ? "bg-white" : "bg-white/50"
-          }`;
-          dot.addEventListener("click", () => setCurrentImageIndex(index));
-          navDiv.appendChild(dot);
-        });
+        // Next Button
+        const nextBtn = document.createElement("button");
+        nextBtn.className = "absolute right-1 top-1/2 -translate-y-1/2 bg-white/80 hover:bg-white rounded-full p-1 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity";
+        nextBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>`;
+        nextBtn.onclick = (e) => {
+          e.stopPropagation();
+          const nextIdx = imageIndex === property.images.length - 1 ? 0 : imageIndex + 1;
+          setCurrentImageIndex(nextIdx);
+          if (popupRef.current) {
+            popupRef.current.setDOMContent(createPopupContent(property, nextIdx));
+          }
+        };
+        carouselDiv.appendChild(nextBtn);
 
-        carouselDiv.appendChild(navDiv);
+        // Counter
+        const counter = document.createElement("div");
+        counter.className = "absolute bottom-1 right-1 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded";
+        counter.textContent = `${imageIndex + 1}/${property.images.length}`;
+        carouselDiv.appendChild(counter);
       }
 
       popupDiv.appendChild(carouselDiv);
     }
 
-    // Property Info Header
+    // Property Info
     const infoDiv = document.createElement("div");
-    infoDiv.className = "p-2 bg-gray-50 rounded-b-lg";
+    infoDiv.className = "p-3 bg-white rounded-b-lg border-t";
 
     const title = document.createElement("h3");
-    title.className = "font-medium text-gray-800 text-xs line-clamp-1 mb-1";
+    title.className = "font-bold text-gray-900 text-[13px] line-clamp-1 mb-1.5";
     title.textContent = property.title;
+    infoDiv.appendChild(title);
 
-    const detailsDiv = document.createElement("div");
-    detailsDiv.className = "flex items-center justify-between";
+    const metaDiv = document.createElement("div");
+    metaDiv.className = "flex items-center justify-between gap-2 mt-2";
 
     const price = document.createElement("div");
-    price.className = "text-sm font-bold text-green-600";
-    price.textContent =
-      typeof property.price === "number"
-        ? `KSh ${property.price.toLocaleString()}`
-        : property.price;
+    price.className = "text-[14px] font-extrabold text-primary";
+    price.textContent = typeof property.price === "number" 
+      ? `KSh ${property.price.toLocaleString()}` 
+      : property.price;
+    metaDiv.appendChild(price);
 
     const type = document.createElement("span");
-    type.className =
-      "text-xs text-gray-500 capitalize bg-white px-2 py-1 rounded-full border";
+    type.className = "text-[10px] text-muted-foreground uppercase tracking-wider font-semibold bg-gray-100 px-1.5 py-0.5 rounded";
     type.textContent = property.propertyType || "Property";
+    metaDiv.appendChild(type);
 
-    detailsDiv.appendChild(price);
-    detailsDiv.appendChild(type);
-    infoDiv.appendChild(title);
-    infoDiv.appendChild(detailsDiv);
+    infoDiv.appendChild(metaDiv);
     popupDiv.appendChild(infoDiv);
 
     return popupDiv;
@@ -343,23 +348,16 @@ const PropertyMap = ({
   };
 
   useEffect(() => {
-    if (!mapContainer.current) return;
+    if (map.current || !mapContainer.current) return;
 
-    // Get Mapbox access token from environment
-    const accessToken = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN;
+    const token = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN;
+    if (!token || token === "YOUR_MAPBOX_ACCESS_TOKEN_HERE") return;
 
-    if (!accessToken || accessToken === "YOUR_MAPBOX_ACCESS_TOKEN_HERE") {
-      console.warn(
-        "Mapbox access token not configured. Please set VITE_MAPBOX_ACCESS_TOKEN in your environment variables."
-      );
-      return;
-    }
+    mapboxgl.accessToken = token;
 
-    mapboxgl.accessToken = accessToken;
-
-    map.current = new mapboxgl.Map({
+    const initializedMap = new mapboxgl.Map({
       container: mapContainer.current,
-      style: "mapbox://styles/mapbox/light-v11",
+      style: STYLE_URLS[mapStyle],
       center: center,
       zoom: zoom,
       minZoom: 5,
@@ -368,96 +366,103 @@ const PropertyMap = ({
       customAttribution: "© Keja Yangu Kenya",
     });
 
-    // Add navigation controls
-    map.current.addControl(
-      new mapboxgl.NavigationControl({
-        visualizePitch: true,
-        showZoom: true,
-        showCompass: true,
-      }),
-      "top-right"
-    );
+    map.current = initializedMap;
 
-    // Add geolocate control
-    map.current.addControl(
+    initializedMap.addControl(new mapboxgl.NavigationControl(), "top-right");
+    initializedMap.addControl(
       new mapboxgl.GeolocateControl({
-        positionOptions: {
-          enableHighAccuracy: true,
-        },
+        positionOptions: { enableHighAccuracy: true },
         trackUserLocation: true,
-        showUserHeading: true,
       }),
       "top-left"
     );
+    initializedMap.addControl(new mapboxgl.FullscreenControl(), "top-right");
 
-    // Add fullscreen control
-    map.current.addControl(new mapboxgl.FullscreenControl(), "top-right");
-
-    // Wait for map to load before adding markers
-    map.current.on("load", () => {
+    initializedMap.on("load", () => {
       setIsMapLoaded(true);
-      createMarkers();
     });
 
-    // Handle map style changes
-    map.current.on("styledata", () => {
-      if (map.current && map.current.isStyleLoaded()) {
-        createMarkers();
+    initializedMap.on("styledata", () => {
+      // Re-trigger marker updates when style changes
+      if (initializedMap.isStyleLoaded()) {
+        updateMarkers();
       }
     });
 
-    // Handle map movement to update popup position
-    map.current.on("move", () => {
-      if (popupRef.current && selectedProperty) {
-        // Update popup position to stay relative to the pin
-        popupRef.current.setLngLat([
-          selectedProperty.longitude,
-          selectedProperty.latitude,
-        ]);
-      }
-    });
-
-    // Handle zoom changes to update popup position
-    map.current.on("zoom", () => {
-      if (popupRef.current && selectedProperty) {
-        // Update popup position to stay relative to the pin
-        popupRef.current.setLngLat([
-          selectedProperty.longitude,
-          selectedProperty.latitude,
-        ]);
-      }
-    });
-
-    // Cleanup
     return () => {
-      if (popupRef.current) {
-        popupRef.current.remove();
-      }
-      map.current?.remove();
-      markersRef.current.clear();
+      if (popupRef.current) popupRef.current.remove();
+      initializedMap.remove();
+      map.current = null;
     };
-  }, [center, zoom, accessToken]);
+  }, []); // Only run once on mount
+
+  // Sync markers when properties or selection changes
+  useEffect(() => {
+    updateMarkers();
+  }, [updateMarkers]);
+
+  // Initial fitBounds - only when data first arrives or drastically changes
+  useEffect(() => {
+    if (!map.current || !isMapLoaded || properties.length === 0) return;
+
+    const bounds = new mapboxgl.LngLatBounds();
+    let count = 0;
+    properties.forEach((p) => {
+      const lng = Number(p.longitude);
+      const lat = Number(p.latitude);
+      if (!isNaN(lng) && !isNaN(lat) && lng !== 0) {
+        bounds.extend([lng, lat]);
+        count++;
+      }
+    });
+
+    if (count > 0) {
+      map.current.fitBounds(bounds, {
+        padding: 50,
+        maxZoom: 14,
+        duration: 1000,
+      });
+    }
+  }, [isMapLoaded, properties.length]); // Only fit bounds when the NUMBER of properties changes (e.g. after filtering)
 
   // Update markers when properties change (for filtering)
   useEffect(() => {
     if (map.current && map.current.isStyleLoaded() && isMapLoaded) {
-      createMarkers();
+      updateMarkers();
     }
   }, [properties, isMapLoaded]);
 
-  // Update selected property when selectedPropertyId changes
+  // Handle selection from outside (props)
   useEffect(() => {
-    if (selectedPropertyId) {
+    if (selectedPropertyId && isMapLoaded) {
       const property = properties.find((p) => p.id === selectedPropertyId);
       if (property) {
-        setSelectedProperty(property);
-        setCurrentImageIndex(0);
+        handleExternalSelection(property);
       }
-    } else {
-      setSelectedProperty(null);
-      setCurrentImageIndex(0);
+    } else if (!selectedPropertyId && popupRef.current) {
+      popupRef.current.remove();
+      popupRef.current = null;
     }
-  }, [selectedPropertyId, properties]);
+  }, [selectedPropertyId, isMapLoaded]);
+
+  const handleExternalSelection = (property: any) => {
+    // Only center and show popup if it's not already the selected one in state
+    // (To avoid jumping when clicking the pin itself)
+    if (selectedProperty?.id !== property.id) {
+      setSelectedProperty(property);
+      setCurrentImageIndex(0);
+
+      if (map.current) {
+        map.current.easeTo({
+          center: [property.longitude, property.latitude],
+          zoom: Math.max(map.current.getZoom(), 14),
+          duration: 800,
+          offset: [0, -50],
+        });
+      }
+      showPopup(property);
+    }
+  };
 
   return (
     <div className={`relative w-full h-full ${className}`}>
@@ -526,112 +531,6 @@ const PropertyMap = ({
             >
               Satellite
             </button>
-          </div>
-        </div>
-      )}
-
-      {/* Property Count Badge */}
-      {properties.length > 0 && (
-        <div className="absolute top-4 right-4 z-10">
-          <div className="bg-white rounded-lg shadow-lg px-3 py-2">
-            <div className="text-sm font-medium text-gray-700">
-              📍 {properties.length} Properties
-            </div>
-            {selectedPropertyId && (
-              <div className="text-xs text-blue-600 font-medium">
-                🎯 Selected
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Enhanced Property Popup - Positioned Above Pin */}
-      {selectedProperty && (
-        <div
-          className="absolute z-20"
-          style={{
-            left: `${
-              map.current
-                ? map.current.project([
-                    selectedProperty.longitude,
-                    selectedProperty.latitude,
-                  ])[0] - 110
-                : 0
-            }px`,
-            top: `${
-              map.current
-                ? map.current.project([
-                    selectedProperty.longitude,
-                    selectedProperty.latitude,
-                  ])[1] - 220
-                : 0
-            }px`,
-          }}
-        >
-          <div className="bg-white rounded-lg shadow-xl border max-w-[220px]">
-            {/* Close Button */}
-            <button
-              onClick={closePopup}
-              className="absolute top-1 right-1 z-30 bg-white/90 backdrop-blur-sm rounded-full p-0.5 hover:bg-white transition-colors"
-            >
-              <X className="h-3 w-3 text-gray-600" />
-            </button>
-
-            {/* Image Carousel */}
-            {selectedProperty.images && selectedProperty.images.length > 0 && (
-              <div className="relative">
-                <div className="aspect-[4/3] rounded-t-lg overflow-hidden">
-                  <img
-                    src={getImageUrl(
-                      selectedProperty.images[currentImageIndex]
-                    )}
-                    alt={`${selectedProperty.title} - Image ${
-                      currentImageIndex + 1
-                    }`}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-
-                {/* Carousel Navigation */}
-                {selectedProperty.images.length > 1 && (
-                  <>
-                    <button
-                      onClick={prevImage}
-                      className="absolute left-1 top-1/2 transform -translate-y-1/2 bg-white/90 backdrop-blur-sm rounded-full p-0.5 hover:bg-white transition-colors"
-                    >
-                      <ChevronLeft className="h-3 w-3 text-gray-600" />
-                    </button>
-                    <button
-                      onClick={nextImage}
-                      className="absolute right-1 top-1/2 transform -translate-y-1/2 bg-white/90 backdrop-blur-sm rounded-full p-0.5 hover:bg-white transition-colors"
-                    >
-                      <ChevronRight className="h-3 w-3 text-gray-600" />
-                    </button>
-                  </>
-                )}
-              </div>
-            )}
-
-            {/* Property Info Header */}
-            <div className="p-2 border-t bg-gray-50 rounded-b-lg">
-              <h3 className="font-medium text-gray-800 text-xs line-clamp-1 mb-1">
-                {selectedProperty.title}
-              </h3>
-              <div className="flex items-center justify-between">
-                <div className="text-sm font-bold text-green-600">
-                  {typeof selectedProperty.price === "number"
-                    ? `KSh ${selectedProperty.price.toLocaleString()}`
-                    : selectedProperty.price}
-                </div>
-                <span className="text-xs text-gray-500 capitalize bg-white px-2 py-1 rounded-full border">
-                  {selectedProperty.propertyType || "Property"}
-                </span>
-              </div>
-            </div>
-
-            {/* Pin Pointer */}
-            <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-white"></div>
           </div>
         </div>
       )}

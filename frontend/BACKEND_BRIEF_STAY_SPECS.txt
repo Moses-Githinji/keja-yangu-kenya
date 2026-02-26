@@ -1,0 +1,40 @@
+# Property Backend Implementation Specifications (Brief Stay / Short Term)
+
+This document outlines the required database schema updates and API enhancements specifically for the "Brief Stay" (short-term rental) route.
+
+## 1. Database Schema Updates (Prisma)
+
+Update the `Property` model to include these hospitality-focused fields:
+
+### Booking Configuration
+- `checkInTime`: String (e.g., "14:00")
+- `checkOutTime`: String (e.g., "10:00")
+- `maxGuests`: Int (e.g., 4)
+- `bedCount`: Int (Number of physical beds)
+- `cleaningFee`: Decimal (Flat fee per stay)
+- `serviceFee`: Decimal (Platform/Admin fee)
+
+### Hospitality Amenities (Boolean or Json)
+- `hasWifi`: Boolean
+- `wifiSpeed`: Int (Mbps)
+- `hasDedicatedWorkspace`: Boolean
+- `hasCoffeeMaker`: Boolean
+- `isQuietArea`: Boolean
+- `toiletriesProvided`: Boolean
+
+### House Rules (Json or String[])
+- `houseRules`: String[] (e.g., "No Smoking", "No Parties", "Pets Allowed", "Self Check-in")
+
+### Short-Term Trust
+- `superhostStatus`: Boolean (If applicable to the vendor)
+- `selfCheckInMethod`: String (e.g., "Lockbox", "Smart Lock", "Keypad")
+
+## 2. API Endpoints
+
+### Availability (Critical for Brief Stay)
+- `GET /properties/:id/availability`: Map of blocked dates (Existing bookings).
+- `POST /properties/:id/book`: Initiation of short-term booking flow.
+
+### Pricing Logic
+- Support for `weekendRate`: Decimal (Price per night on Fri/Sat).
+- Support for `weeklyDiscount`: Decimal (Percentage discount for 7+ nights).

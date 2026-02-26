@@ -37,4 +37,5 @@ backend_implementation_flow.txt
 IMPLEMENTATION_SUMMARY.md
 MAP_FILTER_QUICKVIEW_GUIDE.md
 MAPBOX_SETUP.md
-*.txt
+backend_query_params_requirements.txt
+

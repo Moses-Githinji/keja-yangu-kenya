@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import Header from "@/components/layout/Header";
@@ -46,8 +46,10 @@ const Messages = () => {
   const queryClient = useQueryClient();
   const socket = getSocket();
 
+  const [searchParams, setSearchParams] = useSearchParams();
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedChat, setSelectedChat] = useState<string | null>(null);
+  const initialChatId = searchParams.get("chatId");
+  const [selectedChat, setSelectedChat] = useState<string | null>(initialChatId);
   const [messageText, setMessageText] = useState("");
   const [isTyping, setIsTyping] = useState<Record<string, boolean>>({});
   const [onlineUsers, setOnlineUsers] = useState<Record<string, { isOnline: boolean; lastSeen?: string }>>({});
@@ -141,7 +143,46 @@ const Messages = () => {
       socket.off("user-status-change");
       socket.emit("leave-conversation", selectedChat);
     };
-  }, [selectedChat, queryClient, socket]);
+  }, [selectedChat, queryClient, socket, user?.id]);
+
+  // 4. Mark messages as read when chat is selected or new messages arrive
+  useEffect(() => {
+    if (selectedChat && messages.length > 0 && isAuthenticated) {
+      const unreadMessages = messages.filter(m => !m.isRead && m.senderId !== user?.id);
+      
+      if (unreadMessages.length > 0) {
+        // Mark each unread message as read in the backend
+        unreadMessages.forEach(m => {
+          chatApi.markMessageAsRead(m.id).catch(err => console.error("Failed to mark message as read:", err));
+        });
+
+        // Update local query data to reflect read status immediately
+        queryClient.setQueryData(
+          ["chat-messages", selectedChat],
+          (old: { messages: Message[] } | undefined) => {
+            if (!old) return old;
+            return {
+              ...old,
+              messages: old.messages.map(m => 
+                unreadMessages.some(um => um.id === m.id) ? { ...m, isRead: true, status: "read" } : m
+              )
+            };
+          }
+        );
+
+        // Also update unreadCount in the conversation list locally
+        queryClient.setQueryData(["user-chats"], (old: Chat[] | undefined) => {
+          if (!old) return old;
+          return old.map(chat => 
+            chat.id === selectedChat ? { ...chat, unreadCount: 0 } : chat
+          );
+        });
+
+        // Invalidate user-chats to sync with backend eventually
+        queryClient.invalidateQueries({ queryKey: ["user-chats"] });
+      }
+    }
+  }, [selectedChat, messages, user?.id, queryClient, isAuthenticated]);
 
   // Initial Online Status
   useEffect(() => {
@@ -183,6 +224,7 @@ const Messages = () => {
 
   const handleChatSelect = (chatId: string) => {
     setSelectedChat(chatId);
+    setSearchParams({ chatId });
   };
 
   const formatDate = (dateString: string) => {
@@ -302,7 +344,11 @@ const Messages = () => {
                                   </span>
                                 </div>
 
-                                <p className="text-sm text-muted-foreground line-clamp-1 mb-2">
+                                <p className={`text-sm line-clamp-1 mb-2 ${
+                                  (conversation.unreadCount ?? 0) > 0 
+                                    ? "text-foreground font-bold" 
+                                    : "text-muted-foreground"
+                                }`}>
                                   {conversation.messages?.[0]?.content || "Started a chat"}
                                 </p>
 

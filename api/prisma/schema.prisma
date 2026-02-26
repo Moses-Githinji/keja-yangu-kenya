@@ -198,6 +198,7 @@ model Property {
   owner             User                    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   documents         PropertyDocument[]
   images            PropertyImage[]
+  videos            PropertyVideo[]
   propertyInquiries PropertyInquiry[]
   showingTimes      ShowingTime[]
   favorites         UserPropertyFavorites[]
@@ -247,6 +248,18 @@ model PropertyImage {
   property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
 
   @@map("property_images")
+}
+
+model PropertyVideo {
+  id           String   @id @default(cuid())
+  propertyId   String
+  url          String
+  thumbnailUrl String?
+  title        String?
+  createdAt    DateTime @default(now())
+  property     Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@map("property_videos")
 }
 
 model PropertyDocument {

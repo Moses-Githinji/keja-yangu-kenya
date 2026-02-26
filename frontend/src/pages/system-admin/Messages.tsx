@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ArrowLeft, Send, Loader2, Check, CheckCheck } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { chatApi, Chat, Message } from "@/api/chat";
 import { useAuth } from "@/contexts/AuthContext";
@@ -31,7 +31,9 @@ const MessagesContent: React.FC = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const socket = getSocket();
-  const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialChatId = searchParams.get("chatId");
+  const [selectedConversation, setSelectedConversation] = useState<string | null>(initialChatId);
   const [messageContent, setMessageContent] = useState("");
   const [typingUsers, setTypingUsers] = useState<Record<string, boolean>>({});
   const [onlineUsers, setOnlineUsers] = useState<Record<string, { isOnline: boolean; lastSeen?: string }>>({});
@@ -155,6 +157,44 @@ const MessagesContent: React.FC = () => {
     };
   }, [selectedConversation, queryClient, socket, user?.id]);
 
+  // 4. Mark messages as read when chat is selected or new messages arrive
+  useEffect(() => {
+    if (selectedConversation && messages.length > 0 && user) {
+      const unreadMessages = messages.filter(m => !m.isRead && m.senderId !== user.id);
+
+      if (unreadMessages.length > 0) {
+        // Mark as read in backend
+        unreadMessages.forEach(m => {
+          chatApi.markMessageAsRead(m.id).catch(err => console.error("Failed to mark message as read:", err));
+        });
+
+        // Update local query data
+        queryClient.setQueryData(
+          ["chat-messages", selectedConversation],
+          (old: { messages: Message[] } | undefined) => {
+            if (!old) return old;
+            return {
+              ...old,
+              messages: old.messages.map(m =>
+                unreadMessages.some(um => um.id === m.id) ? { ...m, isRead: true, status: "read" } : m
+              )
+            };
+          }
+        );
+
+        // Update unreadCount in conversation list
+        queryClient.setQueryData(["admin-chats"], (old: Chat[] | undefined) => {
+          if (!old) return old;
+          return old.map(chat =>
+            chat.id === selectedConversation ? { ...chat, unreadCount: 0 } : chat
+          );
+        });
+
+        queryClient.invalidateQueries({ queryKey: ["admin-chats"] });
+      }
+    }
+  }, [selectedConversation, messages, user, queryClient]);
+
   // Initial Online Status
   useEffect(() => {
     if (conversationsData) {
@@ -231,6 +271,11 @@ const MessagesContent: React.FC = () => {
     sendMessageMutation.mutate(messageContent);
   };
 
+  const handleChatSelect = (chatId: string) => {
+    setSelectedConversation(chatId);
+    setSearchParams({ chatId });
+  };
+
   const formatDate = (dateString: string) => {
     try {
       return formatDistanceToNow(new Date(dateString), { addSuffix: true });
@@ -288,7 +333,7 @@ const MessagesContent: React.FC = () => {
                             ? "bg-blue-50 border-blue-200"
                             : "hover:bg-gray-50 border-transparent"
                         }`}
-                        onClick={() => setSelectedConversation(chat.id)}
+                        onClick={() => handleChatSelect(chat.id)}
                       >
                         <div className="flex items-start space-x-3">
                           <div className="relative">
@@ -313,7 +358,11 @@ const MessagesContent: React.FC = () => {
                                 </Badge>
                               )}
                             </div>
-                            <p className="text-sm text-gray-500 truncate h-5">
+                            <p className={`text-sm truncate h-5 ${
+                              chat.unreadCount && chat.unreadCount > 0 
+                                ? "text-gray-900 font-bold" 
+                                : "text-gray-500"
+                            }`}>
                               {lastMsg?.content || "Started a chat"}
                             </p>
                             <p className="text-xs text-gray-400 mt-1">

@@ -18,6 +18,7 @@ import PropertyMap from "@/components/map/PropertyMap";
 import { SearchInput } from "@/components/search/SearchInput";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import LazyImage from "@/components/ui/LazyImage";
 import {
   Select,
   SelectContent,
@@ -121,6 +122,7 @@ const Buy = () => {
         areaUnit: property.areaUnit || "m²",
         rating: property.rating || 0,
         propertyType: property.propertyType || "PROPERTY",
+        listingType: property.listingType,
         longitude: property.longitude || 36.8219,
         latitude: property.latitude || -1.2921,
         isFeatured: property.isFeatured || false,
@@ -131,36 +133,66 @@ const Buy = () => {
     });
   }, [results]);
 
+  // Memoize map-specific properties to prevent unnecessary re-renders
+  const mapProperties = useMemo(() => {
+    return properties.map((p) => ({
+      id: p.id,
+      title: p.title,
+      price: p.rawPrice,
+      bedrooms: p.bedrooms,
+      bathrooms: p.bathrooms,
+      areaSize: p.areaSize,
+      areaUnit: p.areaUnit,
+      images: p.images,
+      longitude: Number(p.longitude),
+      latitude: Number(p.latitude),
+      propertyType: p.propertyType,
+    }));
+  }, [properties]);
+
   // Handle URL query params from landing page
   useEffect(() => {
-    const search = searchParams.get("search");
+    const q = searchParams.get("q");
+    const listingType = searchParams.get("listingType");
     const propertyType = searchParams.get("propertyType");
-    const location = searchParams.get("location");
-    const priceRange = searchParams.get("priceRange");
-    const bedrooms = searchParams.get("bedrooms");
+    const city = searchParams.get("city");
+    const county = searchParams.get("county");
+    const minPrice = searchParams.get("minPrice");
+    const maxPrice = searchParams.get("maxPrice");
+    const minBedrooms = searchParams.get("minBedrooms");
+    const maxBedrooms = searchParams.get("maxBedrooms");
 
-    if (search) updateSearchQuery(search);
-    if (propertyType) updateFilters({ propertyType });
-    if (location) updateFilters({ city: location });
-
-    if (priceRange) {
-      const [min, max] = priceRange
-        .split("-")
-        .map((p) =>
-          p.replace(/[^\d]/g, "")
-            ? parseInt(p.replace(/[^\d]/g, ""))
-            : undefined
-        );
-      updateFilters({ minPrice: min, maxPrice: max });
-    }
-
-    if (bedrooms) updateFilters({ minBedrooms: parseInt(bedrooms) });
-
-    // Clean URL
-    if (search || propertyType || location || priceRange || bedrooms) {
-      window.history.replaceState({}, "", window.location.pathname);
-    }
+    if (q) updateSearchQuery(q);
+    if (listingType) updateFilters({ listingType: listingType.toUpperCase() as any });
+    if (propertyType) updateFilters({ propertyType: propertyType.toUpperCase() });
+    if (city) updateFilters({ city });
+    if (county) updateFilters({ county });
+    if (minPrice) updateFilters({ minPrice: parseInt(minPrice) });
+    if (maxPrice) updateFilters({ maxPrice: parseInt(maxPrice) });
+    if (minBedrooms) updateFilters({ minBedrooms: parseInt(minBedrooms) });
+    if (maxBedrooms) updateFilters({ maxBedrooms: parseInt(maxBedrooms) });
   }, [searchParams, updateSearchQuery, updateFilters]);
+
+  // Sync state back to URL
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (searchQuery) params.set("q", searchQuery);
+    if (filters.listingType) params.set("listingType", filters.listingType);
+    if (filters.propertyType) params.set("propertyType", filters.propertyType);
+    if (filters.city) params.set("city", filters.city);
+    if (filters.county) params.set("county", filters.county);
+    if (filters.minPrice) params.set("minPrice", filters.minPrice.toString());
+    if (filters.maxPrice) params.set("maxPrice", filters.maxPrice.toString());
+    if (filters.minBedrooms) params.set("minBedrooms", filters.minBedrooms.toString());
+    if (filters.maxBedrooms) params.set("maxBedrooms", filters.maxBedrooms.toString());
+
+    const newSearch = params.toString();
+    const currentSearch = window.location.search.replace(/^\?/, "");
+    
+    if (newSearch !== currentSearch) {
+      window.history.replaceState({}, "", `${window.location.pathname}${newSearch ? `?${newSearch}` : ""}`);
+    }
+  }, [searchQuery, filters]);
 
   // Quick view handler
   const handleQuickView = useCallback((property: any) => {
@@ -377,18 +409,7 @@ const Buy = () => {
           {/* Map Section */}
           <div className="border rounded-xl overflow-hidden bg-muted/30">
             <PropertyMap
-              properties={properties.map((p) => ({
-                id: p.id,
-                title: p.title,
-                price: p.rawPrice,
-                bedrooms: p.bedrooms,
-                bathrooms: p.bathrooms,
-                areaSize: p.areaSize,
-                areaUnit: p.areaUnit,
-                images: p.images,
-                longitude: Number(p.longitude),
-                latitude: Number(p.latitude),
-              }))}
+              properties={mapProperties}
               onPinClick={setSelectedPropertyId}
               selectedPropertyId={selectedPropertyId}
             />
@@ -529,14 +550,10 @@ const Buy = () => {
                     >
                       <CardContent className="p-4">
                         <div className="flex gap-5">
-                          <img
+                          <LazyImage
                             src={property.primaryImage}
                             alt={property.title}
                             className="w-32 h-24 object-cover rounded-lg flex-shrink-0"
-                            onError={(e) =>
-                              (e.currentTarget.src =
-                                "/placeholder-property.jpg")
-                            }
                           />
                           <div className="flex-1 min-w-0">
                             <h3 className="font-semibold text-lg mb-1 truncate">

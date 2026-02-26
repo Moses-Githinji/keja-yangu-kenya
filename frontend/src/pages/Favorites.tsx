@@ -4,6 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
+import LazyImage from "@/components/ui/LazyImage";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -310,7 +311,7 @@ const Favorites = () => {
                   >
                     <Card className="hover:shadow-lg transition-all duration-200 group">
                       <div className="relative">
-                        <img
+                        <LazyImage
                           src={favorite.image}
                           alt={favorite.title}
                           className="w-full h-48 object-cover rounded-t-lg"

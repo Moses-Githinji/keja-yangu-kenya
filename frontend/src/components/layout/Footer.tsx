@@ -1,4 +1,4 @@
-import { Home, Facebook, Twitter, Instagram, Linkedin, Mail, Phone, MapPin } from "lucide-react";
+import { Facebook, Twitter, Instagram, Linkedin, Mail, Phone, MapPin } from "lucide-react";
 import { Link } from "react-router-dom";
 
 const Footer = () => {
@@ -9,7 +9,7 @@ const Footer = () => {
           {/* Brand Section */}
           <div className="space-y-4">
             <Link to="/" className="flex items-center space-x-2">
-              <Home className="h-8 w-8 text-primary" />
+              <img src="/logo.png" alt="KejaYangu Logo" className="h-10 w-10 object-contain" />
               <div>
                 <h1 className="text-xl font-bold text-gradient-primary">KejaYangu</h1>
                 <p className="text-xs text-muted-foreground">Space That Suits You</p>

@@ -218,10 +218,39 @@ router.get("/", authenticateToken, async (req, res, next) => {
       orderBy: { updatedAt: "desc" },
     });
 
+    // Map chats to include unread message count
+    const chatsWithUnreadCount = chats.map(chat => {
+      const unreadCount = chat.messages.filter(msg => 
+        msg.senderId !== userId && !msg.isRead
+      ).length;
+      
+      // Since we only took '1' message in the query, we need to do this more efficiently.
+      // Actually, my previous thought was wrong. I should query the count separately or 
+      // include it in the prisma query if possible. 
+      // For now, I will use a Promise.all with counts for each chat for accuracy.
+      return {
+        ...chat,
+        // We'll replace this with the real count below
+      };
+    });
+
+    const enrichedChats = await Promise.all(
+      chats.map(async (chat) => {
+        const unreadCount = await prisma.message.count({
+          where: {
+            chatId: chat.id,
+            senderId: { not: userId },
+            isRead: false,
+          },
+        });
+        return { ...chat, unreadCount };
+      })
+    );
+
     res.status(200).json({
       status: "success",
-      results: chats.length,
-      data: chats,
+      results: enrichedChats.length,
+      data: enrichedChats,
     });
   } catch (error) {
     next(error);
@@ -360,6 +389,33 @@ router.post(
         where: { id },
         data: { updatedAt: new Date() },
       });
+
+      // Create notification for recipient
+      const recipientId = chat.userId === userId ? chat.agentId : chat.userId;
+      
+      try {
+        const notification = await prisma.notification.create({
+          data: {
+            userId: recipientId,
+            type: "SYSTEM",
+            title: "New Message",
+            message: `You have a new message from ${message.sender.firstName}`,
+            metadata: JSON.stringify({
+              chatId: id,
+              messageId: message.id,
+              senderId: userId,
+              type: "CHAT_MESSAGE"
+            })
+          }
+        });
+
+        // Emit real-time notification to the specific user's room
+        if (io) {
+          io.to(`user-${recipientId}`).emit("new-notification", notification);
+        }
+      } catch (notifError) {
+        console.error("Failed to create chat notification:", notifError);
+      }
 
       // Emit socket event
       const io = req.app.get("io");

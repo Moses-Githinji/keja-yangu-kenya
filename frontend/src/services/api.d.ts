@@ -142,16 +142,26 @@ const apiService: ApiService = {
       return api.post("/upload/image", formData);
     },
 
-    uploadImages: (files: File[], folder = "kejayangu_properties") => {
+    uploadImages: (files: File[], propertyId: string) => {
       const formData = new FormData();
       files.forEach((file) => formData.append("images", file));
-      return api.post("/upload/images", formData); // generic fallback if needed
+      return api.post(`/upload/property-images/${propertyId}`, formData);
     },
 
-    uploadDocument: (file: File, folder = "kejayangu_documents") => {
+    uploadDocument: (file: File, folder?: string) => {
       const formData = new FormData();
       formData.append("document", file);
+      if (folder) formData.append("folder", folder);
       return api.post("/upload/document", formData);
+    },
+    
+    uploadVideo: (file: File, propertyId: string) => {
+      const formData = new FormData();
+      formData.append("video", file);
+      return api.post(`/upload/property-videos/${propertyId}`, formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+        timeout: 600000,
+      });
     },
   },
 };

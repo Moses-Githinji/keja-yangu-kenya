@@ -367,6 +367,45 @@ export const apiService = {
         );
       }
     },
+    uploadVideo: async (file, propertyId) => {
+      try {
+        if (!propertyId) {
+          throw new Error("Property ID is required for video upload");
+        }
+
+        const formData = new FormData();
+        formData.append("video", file);
+
+        const onUploadProgress = (progressEvent) => {
+          const percentCompleted = Math.round(
+            (progressEvent.loaded * 100) / (progressEvent.total || 1)
+          );
+          console.log(`Video Upload Progress: ${percentCompleted}%`);
+        };
+
+        const response = await fileUploadApi.post(
+          `/upload/property-videos/${propertyId}`,
+          formData,
+          {
+            headers: {
+              "Content-Type": "multipart/form-data",
+              Accept: "application/json",
+            },
+            onUploadProgress,
+            timeout: 600000, // 10 minutes timeout for video upload
+            maxBodyLength: 100 * 1024 * 1024, // 100MB max body size
+          }
+        );
+        return response.data;
+      } catch (error) {
+        console.error("Video upload error:", error);
+        throw new Error(
+          error.response?.data?.message ||
+          error.message ||
+          "Failed to upload video. Please try again."
+        );
+      }
+    },
   },
 };
 

@@ -1,5 +1,5 @@
 import express from "express";
-import { body, param, validationResult } from "express-validator";
+import { body, validationResult } from "express-validator";
 import { authenticateToken, requireAdmin } from "../middleware/auth.js";
 import { getPrismaClient } from "../config/database.js";
 
@@ -18,34 +18,20 @@ const validateNotification = [
   body("type")
     .isIn(["EMAIL", "SMS", "PUSH", "SYSTEM"])
     .withMessage("Invalid notification type"),
-  body("data").optional().isString().withMessage("Data must be a string"),
+  body("metadata").optional().isString().withMessage("Metadata must be a string"),
 ];
-
-// Helper to clear notification cache
-const clearNotificationCache = async (userId = null) => {
-  try {
-    const redisClient = getRedisClient();
-    if (userId) {
-      await redisClient.del(`user_notifications:${userId}`);
-      await redisClient.del(`unread_count:${userId}`);
-    }
-    console.log("Notification cache cleared.");
-  } catch (error) {
-    console.warn("Failed to clear notification cache:", error.message);
-  }
-};
 
 // @route   GET /api/v1/notifications
 // @desc    Get user's notifications
 // @access  Private
 router.get("/", authenticateToken, async (req, res, next) => {
   try {
-    const { page = 1, limit = 20, type, isRead } = req.query;
+    const { page = 1, limit = 20, type, status } = req.query;
     const prisma = getPrismaClient();
 
     const where = { userId: req.user.id };
     if (type) where.type = type;
-    if (isRead !== undefined) where.isRead = isRead === "true";
+    if (status) where.status = status;
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
@@ -60,8 +46,8 @@ router.get("/", authenticateToken, async (req, res, next) => {
           title: true,
           message: true,
           type: true,
-          isRead: true,
-          data: true,
+          status: true,
+          metadata: true,
           createdAt: true,
         },
       }),
@@ -94,27 +80,13 @@ router.get("/", authenticateToken, async (req, res, next) => {
 // @access  Private
 router.get("/unread-count", authenticateToken, async (req, res, next) => {
   try {
-    const redisClient = getRedisClient();
-    const cacheKey = `unread_count:${req.user.id}`;
-    const cachedCount = await redisClient.get(cacheKey);
-
-    if (cachedCount) {
-      return res.status(200).json({
-        status: "success",
-        data: { unreadCount: parseInt(cachedCount) },
-      });
-    }
-
     const prisma = getPrismaClient();
     const unreadCount = await prisma.notification.count({
       where: {
         userId: req.user.id,
-        isRead: false,
+        status: "UNREAD",
       },
     });
-
-    // Cache for 5 minutes
-    await redisClient.setEx(cacheKey, 300, unreadCount.toString());
 
     res.status(200).json({
       status: "success",
@@ -148,10 +120,11 @@ router.put("/:id/read", authenticateToken, async (req, res, next) => {
 
     await prisma.notification.update({
       where: { id },
-      data: { isRead: true },
+      data: { 
+        status: "READ",
+        readAt: new Date()
+      },
     });
-
-    await clearNotificationCache(req.user.id);
 
     res.status(200).json({
       status: "success",
@@ -172,12 +145,13 @@ router.put("/read-all", authenticateToken, async (req, res, next) => {
     await prisma.notification.updateMany({
       where: {
         userId: req.user.id,
-        isRead: false,
+        status: "UNREAD",
       },
-      data: { isRead: true },
+      data: { 
+        status: "READ",
+        readAt: new Date()
+      },
     });
-
-    await clearNotificationCache(req.user.id);
 
     res.status(200).json({
       status: "success",
@@ -213,8 +187,6 @@ router.delete("/:id", authenticateToken, async (req, res, next) => {
       where: { id },
     });
 
-    await clearNotificationCache(req.user.id);
-
     res.status(200).json({
       status: "success",
       message: "Notification deleted successfully",
@@ -234,11 +206,9 @@ router.delete("/clear-read", authenticateToken, async (req, res, next) => {
     await prisma.notification.deleteMany({
       where: {
         userId: req.user.id,
-        isRead: true,
+        status: "READ",
       },
     });
-
-    await clearNotificationCache(req.user.id);
 
     res.status(200).json({
       status: "success",
@@ -268,7 +238,7 @@ router.post(
         });
       }
 
-      const { title, message, type, data, userIds } = req.body;
+      const { title, message, type, metadata, userIds } = req.body;
       const prisma = getPrismaClient();
 
       if (userIds && Array.isArray(userIds)) {
@@ -280,16 +250,11 @@ router.post(
                 title,
                 message,
                 type,
-                data: data || null,
+                metadata: metadata || null,
                 userId,
               },
             })
           )
-        );
-
-        // Clear cache for affected users
-        await Promise.all(
-          userIds.map((userId) => clearNotificationCache(userId))
         );
 
         res.status(201).json({
@@ -311,15 +276,12 @@ router.post(
                 title,
                 message,
                 type,
-                data: data || null,
+                metadata: metadata || null,
                 userId: user.id,
               },
             })
           )
         );
-
-        // Clear cache for all users
-        await Promise.all(users.map((user) => clearNotificationCache(user.id)));
 
         res.status(201).json({
           status: "success",
@@ -327,123 +289,6 @@ router.post(
           data: { notifications },
         });
       }
-    } catch (error) {
-      next(error);
-    }
-  }
-);
-
-// @route   POST /api/v1/notifications/bulk
-// @desc    Send bulk notifications (Admin only)
-// @access  Private (Admin)
-router.post(
-  "/bulk",
-  authenticateToken,
-  requireAdmin,
-  [
-    body("notifications")
-      .isArray({ min: 1 })
-      .withMessage("Notifications array is required"),
-    body("notifications.*.title")
-      .trim()
-      .isLength({ min: 1, max: 200 })
-      .withMessage("Title must be between 1 and 200 characters"),
-    body("notifications.*.message")
-      .trim()
-      .isLength({ min: 1, max: 1000 })
-      .withMessage("Message must be between 1 and 1000 characters"),
-    body("notifications.*.type")
-      .isIn(["EMAIL", "SMS", "PUSH", "SYSTEM"])
-      .withMessage("Invalid notification type"),
-    body("notifications.*.userIds")
-      .optional()
-      .isArray()
-      .withMessage("User IDs must be an array"),
-  ],
-  async (req, res, next) => {
-    try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(400).json({
-          status: "error",
-          message: "Validation failed",
-          errors: errors.array(),
-        });
-      }
-
-      const { notifications } = req.body;
-      const prisma = getPrismaClient();
-
-      const results = [];
-      const affectedUsers = new Set();
-
-      for (const notification of notifications) {
-        const { title, message, type, data, userIds } = notification;
-
-        if (userIds && Array.isArray(userIds)) {
-          // Send to specific users
-          const createdNotifications = await Promise.all(
-            userIds.map((userId) =>
-              prisma.notification.create({
-                data: {
-                  title,
-                  message,
-                  type,
-                  data: data || null,
-                  userId,
-                },
-              })
-            )
-          );
-
-          userIds.forEach((userId) => affectedUsers.add(userId));
-          results.push({
-            title,
-            sentTo: userIds.length,
-            notifications: createdNotifications,
-          });
-        } else {
-          // Send to all users
-          const users = await prisma.user.findMany({
-            where: { isActive: true },
-            select: { id: true },
-          });
-
-          const createdNotifications = await Promise.all(
-            users.map((user) =>
-              prisma.notification.create({
-                data: {
-                  title,
-                  message,
-                  type,
-                  data: data || null,
-                  userId: user.id,
-                },
-              })
-            )
-          );
-
-          users.forEach((user) => affectedUsers.add(user.id));
-          results.push({
-            title,
-            sentTo: users.length,
-            notifications: createdNotifications,
-          });
-        }
-      }
-
-      // Clear cache for affected users
-      await Promise.all(
-        Array.from(affectedUsers).map((userId) =>
-          clearNotificationCache(userId)
-        )
-      );
-
-      res.status(201).json({
-        status: "success",
-        message: `Bulk notifications sent successfully`,
-        data: { results, totalUsersAffected: affectedUsers.size },
-      });
     } catch (error) {
       next(error);
     }

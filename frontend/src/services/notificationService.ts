@@ -38,10 +38,10 @@ class NotificationService {
           title: n.title,
           message: n.message,
           timestamp: new Date(n.createdAt),
-          isRead: n.isRead,
-          isArchived: false, // Backend doesn't seem to have archive yet
-          isPinned: false,   // Backend doesn't seem to have pin yet
-          metadata: n.data ? JSON.parse(n.data) : {},
+          isRead: n.status === "READ" || n.isRead,
+          isArchived: false,
+          isPinned: false,
+          metadata: n.metadata ? (typeof n.metadata === 'string' ? JSON.parse(n.metadata) : n.metadata) : {},
         }));
         this.isInitialized = true;
         this.updateUnreadCount();

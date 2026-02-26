@@ -6,6 +6,13 @@ export interface PropertyImage {
   order: number;
 }
 
+export interface PropertyVideo {
+  id: string;
+  url: string;
+  thumbnailUrl?: string;
+  title?: string;
+}
+
 export interface PropertyAgent {
   id: string;
   name: string;
@@ -58,6 +65,7 @@ export interface Property {
   views: number;
   inquiryCount: number;
   images: PropertyImage[];
+  videos?: PropertyVideo[];
   agent: PropertyAgent | null;
   latitude?: number;
   longitude?: number;

@@ -40,13 +40,31 @@ const HeroSection = () => {
     // Build query parameters based on active tab and filters
     const queryParams = new URLSearchParams();
 
-    if (searchQuery) queryParams.append("search", searchQuery);
-    if (propertyType) queryParams.append("propertyType", propertyType);
-    if (location) queryParams.append("location", location);
-    if (priceRange) queryParams.append("priceRange", priceRange);
-    if (bedrooms) queryParams.append("bedrooms", bedrooms);
-    if (bathrooms) queryParams.append("bathrooms", bathrooms);
-    if (area) queryParams.append("area", area);
+    // Map active tab to backend listingType enum
+    const listingTypeMap: Record<string, string> = {
+      buy: "SALE",
+      rent: "RENT",
+      "brief-stay": "SHORT_TERM_RENT",
+    };
+
+    if (searchQuery) queryParams.append("q", searchQuery);
+    queryParams.append("listingType", listingTypeMap[activeTab] || "SALE");
+    if (propertyType) queryParams.append("propertyType", propertyType.toUpperCase());
+    if (location) queryParams.append("city", location);
+
+    if (priceRange) {
+      if (priceRange.includes("-")) {
+        const [min, max] = priceRange.split("-");
+        if (min) queryParams.append("minPrice", min);
+        if (max) queryParams.append("maxPrice", max);
+      } else {
+        queryParams.append("minPrice", priceRange);
+      }
+    }
+
+    if (bedrooms) queryParams.append("minBedrooms", bedrooms);
+    if (bathrooms) queryParams.append("minBathrooms", bathrooms);
+    if (area) queryParams.append("minArea", area);
 
     // Route to appropriate page based on active tab
     const queryString = queryParams.toString();
@@ -108,9 +126,9 @@ const HeroSection = () => {
                 <Building2 className="h-4 w-4" />
                 Rent
               </TabsTrigger>
-              <TabsTrigger value="sell" className="flex items-center gap-2">
+              <TabsTrigger value="brief-stay" className="flex items-center gap-2">
                 <MapPin className="h-4 w-4" />
-                Sell
+                Brief Stay
               </TabsTrigger>
             </TabsList>
 
@@ -158,7 +176,7 @@ const HeroSection = () => {
               />
             </TabsContent>
 
-            <TabsContent value="sell" className="space-y-0">
+            <TabsContent value="brief-stay" className="space-y-0">
               <SearchForm
                 searchQuery={searchQuery}
                 setSearchQuery={setSearchQuery}
@@ -176,7 +194,7 @@ const HeroSection = () => {
                 setArea={setArea}
                 onSearch={handleSearch}
                 onReset={handleResetFilters}
-                priceType="sale"
+                priceType="rent"
               />
             </TabsContent>
           </Tabs>
@@ -251,17 +269,17 @@ const SearchForm = ({
   const getPriceOptions = () => {
     if (priceType === "rent") {
       return [
-        { value: "20k-50k", label: "KSh 20K - 50K/month" },
-        { value: "50k-80k", label: "KSh 50K - 80K/month" },
-        { value: "80k-120k", label: "KSh 80K - 120K/month" },
-        { value: "120k+", label: "KSh 120K+/month" },
+        { value: "20000-50000", label: "KSh 20K - 50K/month" },
+        { value: "50000-80000", label: "KSh 50K - 80K/month" },
+        { value: "80000-120000", label: "KSh 80K - 120K/month" },
+        { value: "120000", label: "KSh 120K+/month" },
       ];
     } else {
       return [
-        { value: "5m-15m", label: "KSh 5M - 15M" },
-        { value: "15m-25m", label: "KSh 15M - 25M" },
-        { value: "25m-50m", label: "KSh 25M - 50M" },
-        { value: "50m+", label: "KSh 50M+" },
+        { value: "5000000-15000000", label: "KSh 5M - 15M" },
+        { value: "15000000-25000000", label: "KSh 15M - 25M" },
+        { value: "25000000-50000000", label: "KSh 25M - 50M" },
+        { value: "50000000", label: "KSh 50M+" },
       ];
     }
   };

@@ -4,10 +4,12 @@ import { authenticateToken } from "../middleware/auth.js";
 import {
   uploadImage,
   uploadDocument,
+  uploadVideo,
   deleteImage,
   deleteDocument,
+  deleteVideo,
 } from "../utils/upload.js";
-import { getPrismaClient } from "../config/database.js";
+import { getPrismaClient } from "../utils/prismaClient.js";
 
 const router = express.Router();
 
@@ -167,6 +169,65 @@ router.post(
   }
 );
 
+// Property video upload
+router.post(
+  "/property-videos/:propertyId",
+  authenticateToken,
+  uploadVideo.single("video"),
+  async (req, res) => {
+    try {
+      const { propertyId } = req.params;
+
+      if (!req.file) {
+        return res.status(400).json({
+          status: "error",
+          message: "No video uploaded",
+        });
+      }
+
+      const prisma = getPrismaClient();
+
+      // Verify ownership
+      const property = await prisma.property.findUnique({
+        where: { id: propertyId },
+        select: { id: true, ownerId: true, agentId: true },
+      });
+
+      if (
+        !property ||
+        (property.ownerId !== req.user.id && property.agentId !== req.user.id)
+      ) {
+        return res.status(403).json({
+          status: "error",
+          message: "Access denied – you do not own this property",
+        });
+      }
+
+      const createdVideo = await prisma.propertyVideo.create({
+        data: {
+          url: req.file.path,
+          propertyId,
+          title: req.body.title || "Property Video",
+        },
+      });
+
+      return res.json({
+        status: "success",
+        message: "Video uploaded and saved successfully",
+        data: createdVideo,
+      });
+    } catch (error) {
+      console.error("Property video upload error:", error);
+      return res.status(500).json({
+        status: "error",
+        message: "Upload failed",
+        details:
+          process.env.NODE_ENV === "development" ? error.message : undefined,
+      });
+    }
+  }
+);
+
 // Delete image
 router.delete("/image", authenticateToken, async (req, res) => {
   const { url } = req.body;
@@ -195,6 +256,29 @@ router.delete("/document", authenticateToken, async (req, res) => {
     .json(
       result.success
         ? { status: "success", message: "Document deleted" }
+        : { status: "error", message: result.message }
+    );
+});
+
+// Delete video
+router.delete("/video", authenticateToken, async (req, res) => {
+  const { url } = req.body;
+  if (!url)
+    return res.status(400).json({ status: "error", message: "URL required" });
+
+  const result = await deleteVideo(url);
+  if (result.success) {
+    const prisma = getPrismaClient();
+    await prisma.propertyVideo.deleteMany({
+      where: { url },
+    });
+  }
+
+  res
+    .status(result.success ? 200 : 400)
+    .json(
+      result.success
+        ? { status: "success", message: "Video deleted" }
         : { status: "error", message: result.message }
     );
 });

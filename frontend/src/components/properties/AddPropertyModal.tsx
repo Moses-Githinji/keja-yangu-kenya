@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { X, Upload } from "lucide-react";
+import { X, Upload, MapPin, Search, Navigation, Loader2 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,7 +40,10 @@ const AddPropertyModal: React.FC<AddPropertyModalProps> = ({
 }) => {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
+  const [geocoding, setGeocoding] = useState(false);
+  const [gettingLocation, setGettingLocation] = useState(false);
   const [images, setImages] = useState<{ file: File; preview: string }[]>([]);
+  const [videos, setVideos] = useState<{ file: File; preview: string }[]>([]);
 
   const [formData, setFormData] = useState({
     title: "",
@@ -72,7 +76,6 @@ const AddPropertyModal: React.FC<AddPropertyModalProps> = ({
     projectedYield: "",
     annualAppreciation: "",
     // Media
-    virtualTourUrl: "",
     floorPlanUrl: "",
     // Brief Stay Specifics
     checkInTime: "14:00",
@@ -167,8 +170,119 @@ const AddPropertyModal: React.FC<AddPropertyModalProps> = ({
     setImages((prev) => prev.filter((_, i) => i !== index));
   };
 
+  const handleVideoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files ? Array.from(e.target.files) : [];
+    const newVideos = files.map((file) => ({
+      file,
+      preview: URL.createObjectURL(file), // This will work for video previews too in most browsers
+    }));
+    setVideos((prev) => [...prev, ...newVideos]);
+  };
+
+  const removeVideo = (index: number) => {
+    setVideos((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const fetchCoordinates = async () => {
+    if (!formData.address && !formData.city) {
+      toast({
+        title: "Address required",
+        description: "Please enter an address or city to fetch coordinates.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setGeocoding(true);
+    try {
+      const query = encodeURIComponent(`${formData.address} ${formData.city} ${formData.county} Kenya`);
+      const token = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN;
+      const response = await fetch(
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${query}.json?access_token=${token}&limit=1`
+      );
+      const data = await response.json();
+
+      if (data.features && data.features.length > 0) {
+        const [lng, lat] = data.features[0].center;
+        setFormData((prev) => ({
+          ...prev,
+          latitude: lat.toString(),
+          longitude: lng.toString(),
+        }));
+        toast({
+          title: "Coordinates found",
+          description: `Located at ${lat.toFixed(4)}, ${lng.toFixed(4)}`,
+        });
+      } else {
+        throw new Error("Could not find coordinates for this address.");
+      }
+    } catch (err: any) {
+      toast({
+        title: "Geocoding failed",
+        description: err.message,
+        variant: "destructive",
+      });
+    } finally {
+      setGeocoding(false);
+    }
+  };
+
+  const useCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      toast({
+        title: "Not supported",
+        description: "Geolocation is not supported by your browser.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setGettingLocation(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setFormData((prev) => ({
+          ...prev,
+          latitude: position.coords.latitude.toString(),
+          longitude: position.coords.longitude.toString(),
+        }));
+        setGettingLocation(false);
+        toast({
+          title: "Location detected",
+          description: "Coordinates updated to your current position.",
+        });
+      },
+      (err) => {
+        setGettingLocation(false);
+        toast({
+          title: "Location failed",
+          description: "Could not get your current location. Please check permissions.",
+          variant: "destructive",
+        });
+      }
+    );
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Media validation
+    if (images.length < 15 || images.length > 25) {
+      toast({
+        title: "Image count error",
+        description: `Please provide between 15 and 25 images. Current: ${images.length}`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (videos.length === 0) {
+      toast({
+        title: "Video required",
+        description: "Please upload at least one property video.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     // Basic validation
     if (
@@ -223,7 +337,6 @@ const AddPropertyModal: React.FC<AddPropertyModalProps> = ({
         projectedYield: formData.projectedYield ? parseFloat(formData.projectedYield) : null,
         annualAppreciation: formData.annualAppreciation ? parseFloat(formData.annualAppreciation) : null,
         // Media
-        virtualTourUrl: formData.virtualTourUrl,
         floorPlanUrl: formData.floorPlanUrl,
         // Brief Stay Specifics
         ...(formData.listingType === "SHORT_TERM_RENT" && {
@@ -283,7 +396,29 @@ const AddPropertyModal: React.FC<AddPropertyModalProps> = ({
         } finally {
           setLoading(false);
         }
-      } else {
+      }
+
+      // Upload videos if any
+      if (videos.length > 0) {
+        try {
+          setLoading(true);
+          // For now, we only support one video upload as per the backend route .single("video")
+          await apiService.upload.uploadVideo(videos[0].file, propertyId);
+          toast({
+            title: "Success",
+            description: "Property, images, and video added successfully!",
+          });
+        } catch (videoErr: any) {
+          console.error("Video upload failed:", videoErr);
+          toast({
+            title: "Video Upload Issue",
+            description: `Property and images added, but video failed: ${videoErr.message}`,
+            variant: "destructive",
+          });
+        } finally {
+          setLoading(false);
+        }
+      } else if (images.length === 0) {
         toast({
           title: "Success",
           description: "Property added successfully!",
@@ -331,7 +466,6 @@ const AddPropertyModal: React.FC<AddPropertyModalProps> = ({
       legalStatus: "Title Deed Ready",
       projectedYield: "",
       annualAppreciation: "",
-      virtualTourUrl: "",
       floorPlanUrl: "",
       checkInTime: "14:00",
       checkOutTime: "11:00",
@@ -351,6 +485,7 @@ const AddPropertyModal: React.FC<AddPropertyModalProps> = ({
       toiletriesProvided: true,
     });
     setImages([]);
+    setVideos([]);
   };
 
   return (
@@ -541,8 +676,25 @@ const AddPropertyModal: React.FC<AddPropertyModalProps> = ({
                   </div>
                 </div>
 
-                <div>
-                  <Label htmlFor="address">Full Address</Label>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="address">Full Address</Label>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs text-primary gap-1"
+                      onClick={fetchCoordinates}
+                      disabled={geocoding}
+                    >
+                      {geocoding ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Search className="h-3 w-3" />
+                      )}
+                      Fetch Coordinates
+                    </Button>
+                  </div>
                   <Input
                     id="address"
                     value={formData.address}
@@ -583,6 +735,24 @@ const AddPropertyModal: React.FC<AddPropertyModalProps> = ({
                       required
                     />
                   </div>
+                </div>
+
+                <div className="flex justify-end">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="text-xs gap-1.5"
+                    onClick={useCurrentLocation}
+                    disabled={gettingLocation}
+                  >
+                    {gettingLocation ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Navigation className="h-3.5 w-3.5" />
+                    )}
+                    Use My Current Location
+                  </Button>
                 </div>
               </CardContent>
             </Card>
@@ -937,13 +1107,62 @@ const AddPropertyModal: React.FC<AddPropertyModalProps> = ({
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="virtualTourUrl">Virtual Tour URL (Matterport / 360)</Label>
-                  <Input
-                    id="virtualTourUrl"
-                    value={formData.virtualTourUrl}
-                    onChange={(e) => handleInputChange("virtualTourUrl", e.target.value)}
-                    placeholder="https://my.matterport.com/show/..."
-                  />
+                  <div className="flex items-center justify-between">
+                    <Label>Property Video Tour *</Label>
+                    <span className={cn(
+                      "text-[10px] font-semibold px-2 py-0.5 rounded-full",
+                      videos.length > 0 ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                    )}>
+                      {videos.length > 0 ? "UPLOADED" : "REQUIRED"}
+                    </span>
+                  </div>
+                  <div className="relative">
+                    <input
+                      id="video-upload"
+                      type="file"
+                      accept="video/*"
+                      onChange={handleVideoUpload}
+                      className="sr-only"
+                    />
+                    <Label
+                      htmlFor="video-upload"
+                      className="border-2 border-dashed border-muted-foreground/30 rounded-xl p-8 text-center hover:border-primary/50 transition-colors cursor-pointer flex flex-col items-center justify-center space-y-3 bg-muted/5 group"
+                    >
+                      {videos.length === 0 ? (
+                        <>
+                          <div className="p-3 bg-primary/10 rounded-full group-hover:bg-primary/20 transition-colors">
+                            <Upload className="h-6 w-6 text-primary" />
+                          </div>
+                          <div className="space-y-1">
+                            <p className="text-sm font-semibold text-primary">Click to upload property video</p>
+                            <p className="text-xs text-muted-foreground">MP4, MOV, WEBM • Max 100MB</p>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-black group-hover:ring-2 ring-primary/50 transition-all">
+                          <video
+                            src={videos[0].preview}
+                            className="w-full h-full"
+                            controls
+                            onClick={(e) => e.stopPropagation()} // Prevent Label click when interacting with video controls
+                          />
+                          <Button
+                            type="button"
+                            variant="destructive"
+                            size="icon"
+                            className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              removeVideo(0);
+                            }}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      )}
+                    </Label>
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="floorPlanUrl">Floor Plan Image/PDF URL</Label>
@@ -1020,26 +1239,66 @@ const AddPropertyModal: React.FC<AddPropertyModalProps> = ({
               </CardHeader>
               <CardContent>
                 <div className="border-2 border-dashed border-muted-foreground/50 rounded-xl p-8 text-center">
-                  <Upload className="mx-auto h-12 w-12 text-muted-foreground" />
-                  <div className="mt-4">
-                    <Label htmlFor="image-upload" className="cursor-pointer">
-                      <span className="text-sm font-medium text-primary hover:underline">
-                        Click to upload images
-                      </span>
-                    </Label>
-                    <input
-                      id="image-upload"
-                      type="file"
-                      multiple
-                      accept="image/*"
-                      onChange={handleImageUpload}
-                      className="hidden"
-                    />
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      PNG, JPG, WEBP • Max 10MB per image
-                    </p>
-                  </div>
-                </div>
+                      {images.length === 0 ? (
+                        <>
+                          <Upload className="mx-auto h-12 w-12 text-muted-foreground" />
+                          <div className="mt-4">
+                            <Label htmlFor="image-upload" className="cursor-pointer">
+                              <span className="text-sm font-medium text-primary hover:underline">
+                                Click to upload images (15-25 required)
+                              </span>
+                            </Label>
+                            <input
+                              id="image-upload"
+                              type="file"
+                              multiple
+                              accept="image/*"
+                              onChange={handleImageUpload}
+                              className="hidden"
+                            />
+                            <p className="mt-2 text-xs text-muted-foreground">
+                              PNG, JPG, WEBP • Max 10MB per image
+                            </p>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="mt-4">
+                          <Label htmlFor="image-upload" className="cursor-pointer">
+                            <Button type="button" variant="outline" size="sm" className="gap-2 pointer-events-none">
+                              <Upload className="h-4 w-4" />
+                              Add More Images
+                            </Button>
+                          </Label>
+                          <input
+                            id="image-upload"
+                            type="file"
+                            multiple
+                            accept="image/*"
+                            onChange={handleImageUpload}
+                            className="hidden"
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="mt-4 flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="text-muted-foreground font-medium">Image Count:</span>
+                        <span className={cn(
+                          "font-bold px-2 py-0.5 rounded",
+                          images.length >= 15 && images.length <= 25 
+                            ? "bg-green-100 text-green-700" 
+                            : "bg-red-100 text-red-700"
+                        )}>
+                          {images.length} / 25
+                        </span>
+                      </div>
+                      <p className="text-muted-foreground italic">
+                        {images.length < 15 ? `Add ${15 - images.length} more` : 
+                         images.length > 25 ? `Remove ${images.length - 25} images` : 
+                         "Count is valid"}
+                      </p>
+                    </div>
 
                 {images.length > 0 && (
                   <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">

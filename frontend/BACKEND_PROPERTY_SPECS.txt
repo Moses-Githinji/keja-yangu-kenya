@@ -1,0 +1,42 @@
+# Property Backend Implementation Specifications
+
+This document outlines the required database schema updates and API enhancements for the "Keja Yangu Kenya" property platform.
+
+## 1. Database Schema Updates (Prisma)
+
+Update the `Property` model to include the following fields:
+
+### Utilities & Infrastructure (Json or separate fields)
+- `waterSource`: String (e.g., "City Council", "Borehole", "Borehole & Council")
+- `backupPower`: String (e.g., "Full Generator", "Common Areas Only", "Solar", "None")
+- `fiberProvider`: String[] (List of providers like "Safaricom", "Zuku", "JTL")
+- `hasSolarWaterHeating`: Boolean
+
+### Security (Json or separate booleans)
+- `securityFeatures`: String[] (e.g., "CCTV", "24/7 Guarded", "Electric Fence", "Intercom", "Panic Button")
+
+### Financial & Legal
+- `serviceCharge`: Decimal (Monthly amount)
+- `depositMonths`: Int (Number of rent months required as deposit)
+- `isVerified`: Boolean (Status of Keja Yangu physical verification)
+- `legalStatus`: String (e.g., "Title Deed Ready", "Leasehold", "Sectional Title")
+
+### Investment Info
+- `projectedYield`: Decimal (Percentage)
+- `annualAppreciation`: Decimal (Percentage)
+
+### Media (Support for richer content)
+- `virtualTourUrl`: String (Link to Matterport, 360, etc.)
+- `floorPlanUrl`: String (URL to image or PDF)
+
+## 2. API Endpoints
+
+### Data Retrieval
+- Ensure `GET /properties/:id` returns all above fields.
+- Include `viewCount` (calculated based on unique sessions in the last 24h).
+
+### Admin/Vendor Interface
+- Update `POST` and `PATCH /properties` to allow owners to supply this information.
+
+## 3. Real-Time Interactions (Future)
+- `POST /properties/:id/inquiry`: Simplified inquiry system with categorized reasons.

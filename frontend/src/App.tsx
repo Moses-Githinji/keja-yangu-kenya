@@ -7,6 +7,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { ToastProvider } from "@/components/ui/toast-container";
 import { AuthProvider } from "./contexts/AuthContext";
 import { SocketProvider } from "./contexts/SocketContext";
+import { NotificationProvider } from "./contexts/NotificationContext";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 import BecomeAgentModal from "./components/auth/BecomeAgentModal";
 
@@ -113,7 +114,8 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <SocketProvider>
-          <TooltipProvider>
+          <NotificationProvider>
+            <TooltipProvider>
           <ToastProvider>
             <Router
               future={{
@@ -445,8 +447,9 @@ function App() {
             <Toaster />
             <Sonner />
           </ToastProvider>
-        </TooltipProvider>
-      </SocketProvider>
+            </TooltipProvider>
+          </NotificationProvider>
+        </SocketProvider>
     </AuthProvider>
   </QueryClientProvider>
 );

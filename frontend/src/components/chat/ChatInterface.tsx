@@ -107,7 +107,7 @@ const ChatInterface = ({
     
                 return {
                   ...old,
-                  messages: [payload.message, ...old.messages], 
+                  messages: [...old.messages, payload.message], 
                 };
               }
             );
@@ -179,6 +179,39 @@ const ChatInterface = ({
     scrollToBottom();
   }, [messages.length, isOpen]);
 
+  // 5. Mark messages as read when chat is open or new messages arrive
+  useEffect(() => {
+    if (isOpen && conversationId && messages.length > 0 && user) {
+      const unreadMessages = messages.filter(m => !m.isRead && m.senderId !== user.id);
+      
+      if (unreadMessages.length > 0) {
+        // Mark as read in backend
+        unreadMessages.forEach(m => {
+          chatApi.markMessageAsRead(m.id).catch(err => console.error("Failed to mark message as read:", err));
+        });
+
+        // Update local query data
+        queryClient.setQueryData(
+          ["chat-messages", conversationId],
+          (old: { messages: Message[] } | undefined) => {
+            if (!old) return old;
+            return {
+              ...old,
+              messages: old.messages.map(m => 
+                unreadMessages.some(um => um.id === m.id) ? { ...m, isRead: true, status: "read" } : m
+              )
+            };
+          }
+        );
+
+        // Invalidate user-chats (and variants) to sync unread counts
+        queryClient.invalidateQueries({ queryKey: ["user-chats"] });
+        queryClient.invalidateQueries({ queryKey: ["agent-chats"] });
+        queryClient.invalidateQueries({ queryKey: ["admin-chats"] });
+      }
+    }
+  }, [isOpen, conversationId, messages, user, queryClient]);
+
   // 4. Send Message Mutation
   const sendMessageMutation = useMutation({
     mutationFn: async (content: string) => {
@@ -212,7 +245,7 @@ const ChatInterface = ({
         (old: { messages: Message[] } | undefined) => {
           return {
             ...old,
-            messages: [optimisticMessage, ...(old?.messages || [])],
+            messages: [...(old?.messages || []), optimisticMessage],
           };
         }
       );
@@ -298,7 +331,7 @@ const ChatInterface = ({
 
         <CardContent className="flex-1 flex flex-col p-0 min-h-0">
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 flex flex-col-reverse">
+          <div className="flex-1 overflow-y-auto p-4 space-y-4 flex flex-col">
             {isLoading ? (
               <div className="flex justify-center items-center h-full">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -308,7 +341,9 @@ const ChatInterface = ({
                 <p className="text-muted-foreground">Start the conversation by sending a message.</p>
               </div>
             ) : (
-              messages.map((message) => {
+              [...messages]
+              .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+              .map((message) => {
                 const isUser = message.senderId === user?.id;
                 return (
                   <div

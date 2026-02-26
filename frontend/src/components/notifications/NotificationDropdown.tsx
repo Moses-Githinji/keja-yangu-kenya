@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Bell,
   Check,
@@ -23,53 +24,35 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { motion, AnimatePresence } from "framer-motion";
-import {
-  notificationService,
-  Notification,
-} from "@/services/notificationService";
+import { motion } from "framer-motion";
+import { Notification } from "@/services/notificationService";
+import { useNotification } from "@/contexts/NotificationContext";
+import { useAuth } from "@/contexts/AuthContext";
 
 const NotificationDropdown = () => {
-  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const {
+    notifications,
+    unreadCount,
+    markAsRead,
+    markAllAsRead,
+    deleteNotification
+  } = useNotification();
   const [isOpen, setIsOpen] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
-
-  // Subscribe to notification service
-  useEffect(() => {
-    const unsubscribe = notificationService.subscribe((notifications) => {
-      setNotifications(notifications);
-      setUnreadCount(notificationService.getUnreadCount());
-    });
-
-    return unsubscribe;
-  }, []);
-
-  // Mark notification as read
-  const markAsRead = (notificationId: string) => {
-    notificationService.markAsRead(notificationId);
-  };
-
-  // Mark all as read
-  const markAllAsRead = () => {
-    notificationService.markAllAsRead();
-  };
-
-  // Delete notification
-  const deleteNotification = (notificationId: string) => {
-    notificationService.deleteNotification(notificationId);
-  };
 
   // Get notification icon based on type
-  const getNotificationIcon = (type: Notification["type"]) => {
-    switch (type) {
+  const getNotificationIcon = (type: string) => {
+    switch (type.toLowerCase()) {
       case "message":
+      case "chat_message":
         return <MessageSquare className="h-4 w-4 text-blue-500" />;
       case "property":
         return <Home className="h-4 w-4 text-green-500" />;
       case "payment":
         return <DollarSign className="h-4 w-4 text-yellow-500" />;
       case "system":
-        return <Info className="h-4 w-4 text-purple-500" />;
+        return <MessageSquare className="h-4 w-4 text-primary" />;
       case "inquiry":
         return <User className="h-4 w-4 text-orange-500" />;
       case "reminder":
@@ -95,13 +78,28 @@ const NotificationDropdown = () => {
   };
 
   // Handle notification click
-  const handleNotificationClick = (notification: Notification) => {
+  const handleNotificationClick = async (notification: Notification) => {
     if (!notification.isRead) {
-      markAsRead(notification.id);
+      await markAsRead(notification.id);
     }
-    if (notification.action) {
+
+    // Redirect logic
+    if (notification.metadata?.type === "CHAT_MESSAGE" || notification.type === "chat_message") {
+      const chatId = notification.metadata?.chatId;
+
+      let targetPath = "/messages";
+      if (user?.role === "AGENT") targetPath = "/agent/messages";
+      if (user?.role === "ADMIN") targetPath = "/system-admin/messages";
+
+      if (chatId) {
+        navigate(`${targetPath}?chatId=${chatId}`);
+      } else {
+        navigate(targetPath);
+      }
+    } else if (notification.action) {
       notification.action();
     }
+
     setIsOpen(false);
   };
 

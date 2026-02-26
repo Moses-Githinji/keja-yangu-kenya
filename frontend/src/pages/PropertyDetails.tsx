@@ -20,6 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
+import LazyImage from "@/components/ui/LazyImage";
 import Header from "@/components/layout/Header";
 import { PropertyCard } from "@/components/PropertyCard";
 import { apiService } from "@/services/api";
@@ -186,6 +187,16 @@ const PropertyDetails = () => {
         : typeof data.features === "string"
         ? data.features.split(",").map((f: string) => f.trim())
         : [],
+      amenities: Array.isArray(data.amenities)
+        ? data.amenities
+        : typeof data.amenities === "string"
+        ? data.amenities.split(",").map((f: string) => f.trim())
+        : [],
+      nearbyAmenities: Array.isArray(data.nearbyAmenities)
+        ? data.nearbyAmenities
+        : typeof data.nearbyAmenities === "string"
+        ? data.nearbyAmenities.split(",").map((f: string) => f.trim())
+        : [],
       images:
         Array.isArray(data.images) && data.images.length > 0
           ? data.images
@@ -198,6 +209,7 @@ const PropertyDetails = () => {
                 order: 1,
               },
             ],
+      videos: Array.isArray(data.videos) ? data.videos : [],
       agent: agentData,
     };
   };
@@ -265,7 +277,7 @@ const PropertyDetails = () => {
             <div className="space-y-2">
               <div className="relative aspect-[16/9] rounded-xl overflow-hidden bg-gray-100">
                 {property.images.length > 0 ? (
-                  <img
+                  <LazyImage
                     src={property.images[0]?.url}
                     alt={property.images[0]?.altText || property.title}
                     className="w-full h-full object-cover cursor-pointer"
@@ -290,7 +302,7 @@ const PropertyDetails = () => {
                       className="relative aspect-square rounded-lg overflow-hidden bg-gray-100 cursor-pointer"
                       onClick={() => openCarousel(index)}
                     >
-                      <img
+                      <LazyImage
                         src={image.url}
                         alt={
                           image.altText ||
@@ -408,27 +420,56 @@ const PropertyDetails = () => {
               )}
 
               {/* Amenities */}
-              {property.amenities && (
+              {property.amenities && property.amenities.length > 0 && (
                 <div className="space-y-2">
                   <h2 className="text-xl font-semibold">Amenities</h2>
-                  <p className="text-muted-foreground">{property.amenities}</p>
+                  <div className="flex flex-wrap gap-2">
+                    {property.amenities.map((amenity, index) => (
+                      <Badge key={index} variant="outline" className="text-sm">
+                        {amenity}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Video Tour */}
+              {property.videos && property.videos.length > 0 && (
+                <div className="space-y-4 pt-4 border-t">
+                  <h2 className="text-xl font-semibold flex items-center">
+                    Property Video Tour
+                  </h2>
+                  <div className="aspect-video rounded-xl overflow-hidden shadow-lg bg-black">
+                    <video
+                      className="w-full h-full"
+                      controls
+                      poster={property.videos[0].thumbnailUrl}
+                    >
+                      <source src={property.videos[0].url} type="video/mp4" />
+                      Your browser does not support the video tag.
+                    </video>
+                  </div>
                 </div>
               )}
 
               {/* Nearby Amenities */}
-              {property.nearbyAmenities && (
+              {property.nearbyAmenities && property.nearbyAmenities.length > 0 && (
                 <div className="space-y-2">
                   <h2 className="text-xl font-semibold">Nearby Amenities</h2>
-                  <p className="text-muted-foreground">
-                    {property.nearbyAmenities}
-                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {property.nearbyAmenities.map((amenity, index) => (
+                      <Badge key={index} variant="secondary" className="text-sm">
+                        {amenity}
+                      </Badge>
+                    ))}
+                  </div>
                 </div>
               )}
 
               {/* Map */}
               <div className="space-y-2">
                 <h2 className="text-xl font-semibold">Location</h2>
-                <div className="h-64 rounded-lg overflow-hidden bg-muted">
+                <div className="h-[450px] rounded-lg overflow-hidden bg-muted">
                   {property.latitude && property.longitude ? (
                     <PropertyMap
                       center={[property.longitude, property.latitude]}

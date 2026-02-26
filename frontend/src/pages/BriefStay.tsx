@@ -133,6 +133,7 @@ const BriefStay = () => {
         rating: property.rating || 0,
         reviewCount: property.reviewCount || 0,
         propertyType: property.propertyType || "PROPERTY",
+        listingType: property.listingType,
         longitude: property.longitude || 36.8219,
         latitude: property.latitude || -1.2921,
         features: property.features || [],
@@ -149,23 +150,52 @@ const BriefStay = () => {
 
   // Handle URL query params
   useEffect(() => {
-    const search = searchParams.get("search");
-    const location = searchParams.get("location");
+    const q = searchParams.get("q");
+    const listingType = searchParams.get("listingType");
+    const propertyType = searchParams.get("propertyType");
+    const city = searchParams.get("city");
+    const county = searchParams.get("county");
+    const minPrice = searchParams.get("minPrice");
+    const maxPrice = searchParams.get("maxPrice");
     const checkInParam = searchParams.get("checkIn");
     const checkOutParam = searchParams.get("checkOut");
     const guestsParam = searchParams.get("guests");
 
-    if (search) updateSearchQuery(search);
-    if (location) updateFilters({ city: location });
+    if (q) updateSearchQuery(q);
+    if (listingType) updateFilters({ listingType: listingType.toUpperCase() as any });
+    if (propertyType) updateFilters({ propertyType: propertyType.toUpperCase() });
+    if (city) updateFilters({ city });
+    if (county) updateFilters({ county });
+    if (minPrice) updateFilters({ minPrice: parseInt(minPrice) });
+    if (maxPrice) updateFilters({ maxPrice: parseInt(maxPrice) });
+
     if (checkInParam) setCheckIn(new Date(checkInParam));
     if (checkOutParam) setCheckOut(new Date(checkOutParam));
     if (guestsParam) setGuests(parseInt(guestsParam));
-
-    // Clean URL
-    if (search || location || checkInParam || checkOutParam || guestsParam) {
-      window.history.replaceState({}, "", window.location.pathname);
-    }
   }, [searchParams, updateSearchQuery, updateFilters]);
+
+  // Sync state back to URL
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (searchQuery) params.set("q", searchQuery);
+    if (filters.listingType) params.set("listingType", filters.listingType);
+    if (filters.propertyType) params.set("propertyType", filters.propertyType);
+    if (filters.city) params.set("city", filters.city);
+    if (filters.county) params.set("county", filters.county);
+    if (filters.minPrice) params.set("minPrice", filters.minPrice.toString());
+    if (filters.maxPrice) params.set("maxPrice", filters.maxPrice.toString());
+    
+    if (checkIn) params.set("checkIn", checkIn.toISOString());
+    if (checkOut) params.set("checkOut", checkOut.toISOString());
+    if (guests) params.set("guests", guests.toString());
+
+    const newSearch = params.toString();
+    const currentSearch = window.location.search.replace(/^\?/, "");
+    
+    if (newSearch !== currentSearch) {
+      window.history.replaceState({}, "", `${window.location.pathname}${newSearch ? `?${newSearch}` : ""}`);
+    }
+  }, [searchQuery, filters, checkIn, checkOut, guests]);
 
   const handlePropertyClick = useCallback(
     (property: any) => {

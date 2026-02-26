@@ -1,0 +1,35 @@
+# Backend API Search Query Parameter Requirements
+
+To ensure the Search Widget in Header and Hero sections functions correctly and generates valid URLs that the backend can process, we need confirmation on the following:
+
+## 1. Search Endpoint
+- Confirm the endpoint URL for property searching (e.g., `/api/properties/search` or `/api/properties`).
+
+## 2. Parameter Keys and Mapping
+Please provide the exact keys the API expects for the following filters:
+- **Keyword Search**: Is it `q`, `search`, `query`, or `keyword`?
+- **Listing Type**: Is it `listingType`? (e.g., `SALE`, `RENT`, `SHORT_TERM_RENT`). Are these case-sensitive?
+- **Property Type**: Is it `propertyType`? (e.g., `APARTMENT`, `HOUSE`, `VILLA`, `OFFICE`). What are the allowed values?
+- **Location**:
+  - Does the API support a general `location` string?
+  - Or does it require specific `city`, `county`, or `neighborhood` parameters?
+- **Price Range**: Should we send `minPrice` and `maxPrice` separately, or a single `price` parameter with a range?
+- **Bedrooms/Bathrooms**: What are the keys? (e.g., `minBedrooms`, `bedrooms`, `bath`). Do they accept a single number or a range?
+- **Area/Size**: What are the keys for square footage/meters? (e.g., `minArea`, `maxArea`, `size`).
+
+## 3. Formatting and Enums
+- **Enums**: Are values like `SALE`, `APARTMENT`, etc., expected in SCREAMING_SNAKE_CASE, lowercase, or PascalCase?
+- **Numeric Values**: Should prices be sent as raw numbers (e.g., `5000000`) or strings?
+
+## 4. Pagination and Sorting
+- Confirm the parameters for:
+  - `page` / `offset`
+  - `limit` / `pageSize`
+  - `sortBy` (allowed fields: `price`, `createdAt`, `relevance`)
+  - `order` (`asc` vs `desc`)
+
+## 5. URL Structure Preference
+- Do you prefer the frontend URL to mirror the API parameters exactly?
+  - Example: `?listingType=SALE&city=Nairobi&minPrice=10000000`
+- Or a more compressed version?
+  - Example: `?type=sale&loc=nairobi&price=10m-20m`

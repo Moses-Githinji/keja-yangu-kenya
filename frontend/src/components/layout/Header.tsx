@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
-  Home,
   Search,
   User,
   Bell,
@@ -101,7 +100,7 @@ const Header = () => {
         <div className="flex h-16 items-center justify-between">
           {/* Logo */}
           <Link to="/" className="flex items-center space-x-2">
-            <Home className="h-8 w-8 text-primary" />
+            <img src="/logo.png" alt="KejaYangu Logo" className="h-10 w-10 object-contain" />
             <div className="hidden sm:block">
               <h1 className="text-2xl font-bold text-gradient-primary">
                 KejaYangu

@@ -134,3 +134,5 @@ sessions/
 
 # Frontend Integration Guidelines
 PROPERTY_ENHANCEMENT_GUIDELINES.txt
+frontend_notifications_guide.txt
+backend_search_requirements.txt

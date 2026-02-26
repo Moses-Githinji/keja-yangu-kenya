@@ -33,6 +33,17 @@ const documentStorage = new CloudinaryStorage({
   },
 });
 
+// Storage for videos
+const videoStorage = new CloudinaryStorage({
+  cloudinary,
+  params: {
+    folder: "kejayangu_videos",
+    resource_type: "video",
+    allowed_formats: ["mp4", "mov", "avi", "mkv", "webm"],
+    transformation: [{ quality: "auto" }],
+  },
+});
+
 // Multer middleware for images
 export const uploadImage = multer({
   storage: imageStorage,
@@ -60,6 +71,18 @@ export const uploadDocument = multer({
     ];
     if (!allowed.includes(file.mimetype)) {
       return cb(new Error("Invalid document type!"), false);
+    }
+    cb(null, true);
+  },
+});
+
+// Multer middleware for videos
+export const uploadVideo = multer({
+  storage: videoStorage,
+  limits: { fileSize: 100 * 1024 * 1024 }, // 100MB
+  fileFilter: (req, file, cb) => {
+    if (!file.mimetype.startsWith("video/")) {
+      return cb(new Error("Only video files are allowed!"), false);
     }
     cb(null, true);
   },
@@ -97,6 +120,25 @@ export const deleteDocument = async (documentUrl) => {
       : { success: false, message: result.result };
   } catch (error) {
     console.error("Delete document error:", error);
+    return { success: false, message: error.message };
+  }
+};
+
+// Delete video from Cloudinary
+export const deleteVideo = async (videoUrl) => {
+  try {
+    const publicIdMatch = videoUrl.match(/\/v\d+\/(.+?)\./);
+    if (!publicIdMatch) throw new Error("Invalid Cloudinary URL");
+    const publicId = publicIdMatch[1];
+
+    const result = await cloudinary.uploader.destroy(publicId, {
+      resource_type: "video",
+    });
+    return result.result === "ok"
+      ? { success: true }
+      : { success: false, message: result.result };
+  } catch (error) {
+    console.error("Delete video error:", error);
     return { success: false, message: error.message };
   }
 };

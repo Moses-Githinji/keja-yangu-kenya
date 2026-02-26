@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import AdminLayout from "@/components/admin/AdminLayout";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   Card,
   CardContent,
@@ -32,6 +33,7 @@ const AdminOverview: React.FC = () => {
 };
 
 const AdminOverviewContent: React.FC = () => {
+  const { user } = useAuth();
   const [stats, setStats] = useState({
     properties: "0",
     users: "0",
@@ -183,7 +185,7 @@ const AdminOverviewContent: React.FC = () => {
       <div className="mb-8 flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">
-            System Administrator Dashboard
+            Welcome, {user?.firstName}
           </h1>
           <p className="text-gray-600 mt-2">
             Manage users, agents, properties, and system settings

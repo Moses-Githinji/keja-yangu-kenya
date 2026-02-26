@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Bed, Bath, Square, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import LazyImage from "@/components/ui/LazyImage";
 
 interface PropertyImage {
   id: string;
@@ -52,13 +53,10 @@ export const PropertyCard = ({ property }: PropertyCardProps) => {
     <div className="group overflow-hidden rounded-lg border bg-card text-card-foreground shadow-sm transition-all hover:shadow-md">
       <Link to={`/property/${property.id}`} className="block">
         <div className="relative aspect-video overflow-hidden">
-          <img
+          <LazyImage
             src={images[currentImageIndex]?.url || '/placeholder-property.jpg'}
             alt={images[currentImageIndex]?.altText || property.title}
             className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-            onError={(e) => {
-              (e.target as HTMLImageElement).src = '/placeholder-property.jpg';
-            }}
           />
           
           {/* Image Navigation Arrows */}

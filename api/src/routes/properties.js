@@ -2,6 +2,7 @@ import express from "express";
 import { getPrismaClient } from "../utils/prismaClient.js";
 import { authenticateToken } from "../middleware/auth.js";
 import { getSimilarProperties } from "../services/propertyService.js";
+import { deleteImage, deleteVideo } from "../utils/upload.js";
 
 const router = express.Router();
 
@@ -165,6 +166,9 @@ router.get("/", async (req, res, next) => {
         images: {
           orderBy: { order: "asc" },
         },
+        videos: {
+          orderBy: { createdAt: "asc" },
+        },
         owner: {
           select: {
             firstName: true,
@@ -219,6 +223,9 @@ router.get("/:id", async (req, res, next) => {
       include: {
         images: {
           orderBy: { order: "asc" },
+        },
+        videos: {
+          orderBy: { createdAt: "asc" },
         },
         owner: {
           select: {
@@ -813,7 +820,24 @@ router.delete("/:id", authenticateToken, async (req, res, next) => {
       });
     }
 
-    // Delete property (cascade will handle related records)
+    // Cleanup media from Cloudinary
+    const propertyWithMedia = await prisma.property.findUnique({
+      where: { id: propertyId },
+      include: { images: true, videos: true }
+    });
+
+    if (propertyWithMedia) {
+      // Delete images
+      for (const img of propertyWithMedia.images) {
+        await deleteImage(img.url);
+      }
+      // Delete videos
+      for (const vid of propertyWithMedia.videos) {
+        await deleteVideo(vid.url);
+      }
+    }
+
+    // Delete property (cascade will handle related records in DB)
     await prisma.property.delete({
       where: { id: propertyId },
     });
